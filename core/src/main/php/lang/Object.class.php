@@ -21,32 +21,7 @@
      *
      */
     public function __clone() {
-      if (!$this->__id) $this->__id= microtime();
-      $this->__id= microtime();
-    }
-
-    /**
-     * Static field read handler
-     *
-     */
-    public static function __getStatic($name) {
-      if ("\7" === $name{0}) {
-        $t= debug_backtrace();
-        return eval('return '.$t[1]['args'][0][0].'::$'.substr($name, 1).';');
-      }
-      return NULL;
-    }
-
-    /**
-     * Static field read handler
-     *
-     */
-    public static function __setStatic($name, $value) {
-      if ("\7" === $name{0}) {
-        $t= debug_backtrace();
-        eval($t[1]['args'][0][0].'::$'.substr($name, 1).'= $value;');
-        return;
-      }
+      $this->__id= uniqid('', TRUE);
     }
 
     /**
@@ -54,12 +29,39 @@
      *
      */
     public static function __callStatic($name, $args) {
-      if ("\7" === $name{0}) {
-        $t= debug_backtrace();
-        return call_user_func_array(array($t[1]['args'][0][0], substr($name, 1)), $args);
-      }
       $t= debug_backtrace();
-      throw new Error('Call to undefined method '.$t[1]['class'].'::'.$name);
+
+      // Get self
+      $i= 1; $s= sizeof($t);
+      while (!isset($t[$i]['class']) && $i++ < $s) { }
+      $self= $t[$i]['class'];
+
+      // This is a bug in PHP 5.3.3, parent::method() will always invoke __callStatic()
+      // Check up to the next level if we can find an object, this is an indicator that 
+      // this situations is occurring. In other PHP version, we don't have an object here
+      // in any case reproducable at the time of writing, thus saving version_compare()
+      if (isset($t[$i+ 1]['object'])) {
+        $instance= $t[$i+ 1]['object'];
+
+        // Get scope
+        $i++;
+        while (!isset($t[$i]['class']) && $i++ < $s) { }
+        $scope= isset($t[$i]['class']) ? $t[$i]['class'] : NULL;
+
+        if (NULL != $scope && isset(xp::$ext[$scope])) {
+          foreach (xp::$ext[$scope] as $type => $class) {
+            if (!$instance instanceof $type || !method_exists($class, $name)) continue;
+            array_unshift($args, $instance);
+            return call_user_func_array(array($class, $name), $args);
+          }
+        }
+        throw new Error('Call to undefined method '.xp::nameOf($self).'::'.$name.'() from scope '.xp::nameOf($scope));
+      }
+
+      if ("\7" === $name{0}) {
+        return call_user_func_array(array($self, substr($name, 1)), $args);
+      }
+      throw new Error('Call to undefined static method '.xp::nameOf($self).'::'.$name.'()');
     }
 
     /**
@@ -67,9 +69,6 @@
      *
      */
     public function __get($name) {
-      if ("\7" === $name{0}) {
-        return $this->{substr($name, 1)};
-      }
       return NULL;
     }
 
@@ -78,10 +77,6 @@
      *
      */
     public function __set($name, $value) {
-      if ("\7" === $name{0}) {
-        $this->{substr($name, 1)}= $value;
-        return;
-      }
       $this->{$name}= $value;
     }
     
@@ -105,8 +100,8 @@
       while (!isset($t[$i]['class']) && $i++ < $s) { }
       $scope= isset($t[$i]['class']) ? $t[$i]['class'] : NULL;
 
-      if (NULL != $scope && isset(xp::$registry['ext'][$scope])) {
-        foreach (xp::$registry['ext'][$scope] as $type => $class) {
+      if (NULL != $scope && isset(xp::$ext[$scope])) {
+        foreach (xp::$ext[$scope] as $type => $class) {
           if (!$this instanceof $type || !method_exists($class, $name)) continue;
           array_unshift($args, $this);
           return call_user_func_array(array($class, $name), $args);
@@ -121,7 +116,7 @@
      * @return  string
      */
     public function hashCode() {
-      if (!$this->__id) $this->__id= microtime();
+      if (!$this->__id) $this->__id= uniqid('', TRUE);
       return $this->__id;
     }
     
@@ -133,8 +128,8 @@
      */
     public function equals($cmp) {
       if (!$cmp instanceof Generic) return FALSE;
-      if (!$this->__id) $this->__id= microtime();
-      if (!$cmp->__id) $cmp->__id= microtime();
+      if (!$this->__id) $this->__id= uniqid('', TRUE);
+      if (!$cmp->__id) $cmp->__id= uniqid('', TRUE);
       return $this === $cmp;
     }
     
@@ -179,7 +174,7 @@
      * @return  string
      */
     public function toString() {
-      if (!$this->__id) $this->__id= microtime();
+      if (!$this->__id) $this->__id= uniqid('', TRUE);
       return xp::stringOf($this);
     }
   }

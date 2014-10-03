@@ -43,12 +43,12 @@
         return;
       }        
 
-      $charset= strtoupper($charset ? $charset : iconv_get_encoding('input_encoding'));
+      $charset= $charset ? strtolower($charset) : xp::ENCODING;
 
       // Convert the input to internal encoding
       $this->buffer= iconv($charset, 'utf-8', $arg);
       if (xp::errorAt(__FILE__, __LINE__ - 1)) {
-        $message= key(xp::$registry['errors'][__FILE__][__LINE__ - 2]);
+        $message= key(xp::$errors[__FILE__][__LINE__ - 2]);
         xp::gc(__FILE__);
         throw new FormatException($message.($charset == 'utf-8'
           ? ' with charset '.$charset
@@ -87,7 +87,7 @@
      * @return  string
      */
     public function toString() {
-      return iconv('utf-8', iconv_get_encoding('output_encoding').'//TRANSLIT', $this->buffer);
+      return iconv('utf-8', xp::ENCODING.'//TRANSLIT', $this->buffer);
     }
 
     /**
@@ -97,7 +97,7 @@
      * @return  string
      */
     public function __toString() {
-      return iconv(STR_ENC, iconv_get_encoding('output_encoding').'//TRANSLIT', $this->buffer);
+      return iconv(STR_ENC, xp::ENCODING.'//TRANSLIT', $this->buffer);
     }
    
     /**
@@ -107,7 +107,7 @@
      * @return  lang.types.Bytes
      */
     public function getBytes($charset= NULL) {
-      $charset= strtoupper($charset ? $charset : iconv_get_encoding('input_encoding'));
+      $charset= $charset ? strtolower($charset) : xp::ENCODING;
 
       return new Bytes(STR_ENC === $charset 
         ? $this->buffer 

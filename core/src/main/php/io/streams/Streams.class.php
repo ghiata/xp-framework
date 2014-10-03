@@ -211,9 +211,9 @@
       if (!isset(self::$streams[$id])) {
         return FALSE;
       } else if ('r' === $m) {
-        return array('size' => 0);
+        return array('size' => 0, 'mode' => 0100644);
       } else if ('w' === $m) {
-        return array('size' => 0);
+        return array('size' => 0, 'mode' => 0100644);
       }
     }
 
@@ -246,5 +246,15 @@
      * @return  bool eof
      */
     public abstract function stream_eof();
+
+    /**
+     * Callback for casting
+     *
+     * @param   int cast_as
+     * @return  var
+     */
+    public function stream_cast($cast_as) {
+      return FALSE;
+    }
   }
 ?>

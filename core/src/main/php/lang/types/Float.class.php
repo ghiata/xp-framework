@@ -8,9 +8,21 @@
 
   /**
    * The Float class wraps a value of the type float
-   *
-   * @purpose  Wrapper
    */
   class Float extends Number {
+
+    /**
+     * ValueOf factory
+     *
+     * @param   string $value
+     * @return  self
+     * @throws  lang.IllegalArgumentException
+     */
+    public static function valueOf($value) {
+      if (!is_numeric($value)) {
+        throw new IllegalArgumentException('Not a number: '.$value);
+      }
+      return new self($value);
+    }
   }
 ?>

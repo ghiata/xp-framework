@@ -39,7 +39,7 @@ objectpart:
 ;
 
 objectkey:
-    '"' word '"' { $$= iconv($this->targetEncoding, 'iso-8859-1', $2); /* xp::CHARSET */ }
+    '"' word '"' { $$= iconv($this->targetEncoding, xp::ENCODING, $2); }
   | '"' '"' { $$= ''; }
 ;    
 
@@ -54,7 +54,14 @@ arraycontent:
 ;
 
 string:
-    '"' word '"' { $$= $2; }
+    '"' word '"' {
+      if (xp::errorAt(__FILE__)) {
+        $e= new FormatException('Cannot decode string '.create(new Bytes($1))->toString().' to '.$this->targetEncoding);
+        xp::gc(__FILE__);
+        throw $e;
+      }
+      $$= $2;
+    }
   | '"' '"' { $$= ''; }
 ;
 
@@ -91,13 +98,11 @@ atom:
 ;
 %%
 
-  protected $targetEncoding= 'iso-8859-1';  // xp::CHARSET
+  protected $targetEncoding= xp::ENCODING;
 
   /**
    * Set target encoding. The target encoding is the string encoding that all
    * string that leave the parser will have.
-   *
-   * The default encoding is 'iso-8859-1'
    *
    * @param   string e
    */

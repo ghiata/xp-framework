@@ -8,27 +8,36 @@
    * The abstract class Number is the superclass of classes representing
    * numbers
    *
-   * @test     xp://net.xp_framework.unittest.core.types.NumberTest
-   * @purpose  Base class
+   * @test  xp://net.xp_framework.unittest.core.types.NumberTest
    */
   abstract class Number extends Object {
-    public
-      $value = '';
-
+    public $value = '';
     
     /**
      * Constructor
      *
      * @param   string value
-     * @throws  lang.IllegalArgumentException
      */
     public function __construct($value) {
-      if (!is_numeric($value))
-        throw new IllegalArgumentException('Not a number: '.$value);
-
       $this->value= (string)$value;
     }
-    
+
+    /**
+     * ValueOf factory
+     *
+     * NOTE: We don't use a base-class version with "new static" here because
+     * in PHP 5.3.3 there is a bug with the class resolution when this method
+     * is invoked via reflection.
+     *
+     * @see     https://github.com/xp-framework/xp-framework/issues/293
+     * @param   string $value
+     * @return  self
+     * @throws  lang.IllegalArgumentException
+     */
+    public static function valueOf($value) {
+      raise('lang.MethodNotImplementedException', 'Abstract base class', __METHOD__);
+    }
+
     /**
      * Returns the value of this number as an int.
      *

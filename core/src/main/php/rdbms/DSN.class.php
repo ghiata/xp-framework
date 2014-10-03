@@ -4,7 +4,7 @@
  * $Id$
  */
 
-  uses('peer.URL');
+  uses('peer.URL', 'util.Objects');
 
   define('DB_STORE_RESULT',     0x0001);
   define('DB_UNBUFFERED',       0x0002);
@@ -184,28 +184,24 @@
     }
 
     /**
-     * Helper method to compare two array maps recursively
+     * Returns a new DSN equal to this except for a NULLed password
      *
-     * @param   [:var] a1
-     * @param   [:var] a2
-     * @return  bool
+     * @return  self
      */
-    protected function arrayequals($a1, $a2) {
-      if (sizeof($a1) !== sizeof($a2)) return FALSE;
-      foreach ($a1 as $k => $v) {
-        if (!array_key_exists($k, $a2)) {
-          return FALSE;
-        } else if (is_array($v)) {
-          if (!$this->arrayequals($v, $a2[$k])) return FALSE;
-        } else if ($v instanceof Generic) {
-          if (!$v->equals($a2[$k])) return FALSE;
-        } else {
-          if ($v !== $a2[$k]) return FALSE;
-        }
-      }
-      return TRUE;
+    public function withoutPassword() {
+      $clone= clone $this;
+      $clone->url->setPassword(NULL);
+      return $clone;
     }
-    
+
+    /**
+     * Clone callback method; clone embedded URL, too, so we're safe to change it
+     * without changing the original
+     */
+    public function __clone() {
+      $this->url= clone $this->url;
+    }
+
     /**
      * Checks whether an object is equal to this DSN
      *
@@ -222,7 +218,7 @@
         $cmp->getPort() === $this->getPort() &&
         $cmp->getDatabase() === $this->getDatabase() &&
         $cmp->flags === $this->flags &&
-        $this->arrayequals($cmp->prop, $this->prop)
+        Objects::equal($cmp->prop, $this->prop)
       );
     }
   }

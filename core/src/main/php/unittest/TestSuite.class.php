@@ -7,6 +7,7 @@
   uses(
     'util.profiling.Timer',
     'unittest.TestCase',
+    'unittest.TestVariation',
     'unittest.TestResult',
     'unittest.TestListener',
     'unittest.TestNotRun',
@@ -35,6 +36,7 @@
    *
    * @test     xp://net.xp_framework.unittest.tests.SuiteTest
    * @test     xp://net.xp_framework.unittest.tests.ListenerTest
+   * @test     xp://net.xp_framework.unittest.tests.BeforeAndAfterClassTest
    * @see      http://junit.sourceforge.net/doc/testinfected/testing.htm
    * @purpose  Testcase container
    */
@@ -187,6 +189,64 @@
     }
 
     /**
+     * Returns values
+     *
+     * @param  unittest.TestCase test
+     * @param  var annotation
+     * @return var values a traversable structure
+     */
+    protected function valuesFor($test, $annotation) {
+      if (!is_array($annotation)) {               // values("source")
+        $source= $annotation;
+        $args= array();
+      } else if (isset($annotation['source'])) {  // values(source= "src" [, args= ...])
+        $source= $annotation['source'];
+        $args= isset($annotation['args']) ? $annotation['args'] : array();
+      } else {                                    // values([1, 2, 3])
+        return $annotation;
+      }
+
+      // Route "ClassName::methodName" -> static method of the given class,
+      // "self::method" -> static method of the test class, and "method" 
+      // -> the run test's instance method
+      if (FALSE === ($p= strpos($source, '::'))) {
+        return $test->getClass()->getMethod($source)->setAccessible(TRUE)->invoke($test, $args);
+      }
+      $ref= substr($source, 0, $p);
+      if ('self' === $ref) {
+        $class= $test->getClass();
+      } else if (strstr($ref, '.')) {
+        $class= XPClass::forName($ref);
+      } else {
+        $class= XPClass::forName(xp::nameOf($ref));
+      }
+      return $class->getMethod(substr($source, $p+ 2))->invoke(NULL, $args);
+    }
+
+    /**
+     * Returns values
+     *
+     * @param  var annotatable
+     * @param  string impl The interface which must've been implemented
+     * @return var[]
+     */
+    protected function actionsFor($annotatable, $impl) {
+      $r= array();
+      if ($annotatable->hasAnnotation('action')) {
+        $action= $annotatable->getAnnotation('action');
+        $type= XPClass::forName($impl);
+        if (is_array($action)) {
+          foreach ($action as $a) {
+            if ($type->isInstance($a)) $r[]= $a;
+          }
+        } else {
+          if ($type->isInstance($action)) $r[]= $action;
+        }
+      }
+      return $r;
+    }
+
+    /**
      * Run a test case.
      *
      * @param   unittest.TestCase test
@@ -194,7 +254,8 @@
      * @throws  lang.MethodNotImplementedException
      */
     protected function runInternal($test, $result) {
-      $method= $test->getClass()->getMethod($test->name);
+      $class= $test->getClass();
+      $method= $class->getMethod($test->name);
       $this->notifyListeners('testStarted', array($test));
       
       // Check for @ignore
@@ -231,122 +292,157 @@
         $eta= $method->getAnnotation('limit', 'time');
       }
 
-      xp::gc();
-      $timer= new Timer();
-      $timer->start();
-
-      // Setup test
-      try {
-        $test->setUp();
-      } catch (PrerequisitesNotMetError $e) {
-        $timer->stop();
-        $this->notifyListeners('testSkipped', array(
-          $result->setSkipped($test, $e, $timer->elapsedTime())
-        ));
-        xp::gc();
-        return;
-      } catch (AssertionFailedError $e) {
-        $timer->stop();
-        $this->notifyListeners('testFailed', array(
-          $result->setFailed($test, $e, $timer->elapsedTime())
-        ));
-        xp::gc();
-        return;
-      } catch (Throwable $t) {
-        $timer->stop();
-        $this->notifyListeners('testFailed', array(
-          $result->set($test, new TestError($test, $t, $timer->elapsedTime()))
-        ));
-        xp::gc();
-        return;
+      // Check for @values
+      if ($method->hasAnnotation('values')) {
+        $annotation= $method->getAnnotation('values');
+        $variation= TRUE;
+        $values= $this->valuesFor($test, $annotation);
+      } else {
+        $variation= FALSE;
+        $values= array(array());
       }
 
-      // Run test
-      try {
-        $method->invoke($test, NULL);
-      } catch (TargetInvocationException $t) {
-        $timer->stop();
+      // Check for @actions, initialize setUp and tearDown call chains
+      $actions= array_merge(
+        $this->actionsFor($class, 'unittest.TestAction'),
+        $this->actionsFor($method, 'unittest.TestAction')
+      );
+      $setUp= function($test) use($actions) {
+        foreach ($actions as $action) {
+          $action->beforeTest($test);
+        }
+        $test->setUp();
+      };
+      $tearDown= function($test) use($actions) {
         $test->tearDown();
-        $e= $t->getCause();
+        foreach ($actions as $action) {
+          $action->afterTest($test);
+        }
+      };
 
-        // Was that an expected exception?
-        if ($expected && $expected[0]->isInstance($e)) {
-          if ($eta && $timer->elapsedTime() > $eta) {
+      $timer= new Timer();
+      foreach ($values as $args) {
+        $t= $variation ? new TestVariation($test, $args) : $test;
+        xp::gc();
+        $timer->start();
+
+        // Setup test
+        try {
+          $setUp($test);
+        } catch (PrerequisitesNotMetError $e) {
+          $timer->stop();
+          $this->notifyListeners('testSkipped', array(
+            $result->setSkipped($t, $e, $timer->elapsedTime())
+          ));
+          xp::gc();
+          continue;
+        } catch (AssertionFailedError $e) {
+          $timer->stop();
+          $this->notifyListeners('testFailed', array(
+            $result->setFailed($t, $e, $timer->elapsedTime())
+          ));
+          xp::gc();
+          continue;
+        } catch (Throwable $x) {
+          $timer->stop();
+          $this->notifyListeners('testFailed', array(
+            $result->set($t, new TestError($t, $x, $timer->elapsedTime()))
+          ));
+          xp::gc();
+          continue;
+        }
+
+        // Run test
+        try {
+          $method->invoke($test, is_array($args) ? $args : array($args));
+        } catch (TargetInvocationException $x) {
+          $timer->stop();
+          $tearDown($test);
+          $e= $x->getCause();
+
+          // Was that an expected exception?
+          if ($expected && $expected[0]->isInstance($e)) {
+            if ($eta && $timer->elapsedTime() > $eta) {
+              $this->notifyListeners('testFailed', array(
+                $result->setFailed(
+                  $t,
+                  new AssertionFailedError('Timeout', sprintf('%.3f', $timer->elapsedTime()), sprintf('%.3f', $eta)), 
+                  $timer->elapsedTime()
+                )
+              ));
+            } else if ($expected[1] && !preg_match($expected[1], $e->getMessage())) {
+              $this->notifyListeners('testFailed', array(
+                $result->setFailed(
+                  $t,
+                  new AssertionFailedError('Expected '.$e->getClassName().'\'s message differs', $e->getMessage(), $expected[1]),
+                  $timer->elapsedTime()
+                )
+              ));
+            } else if (sizeof(xp::$errors) > 0) {
+              $this->notifyListeners('testWarning', array(
+                $result->set($t, new TestWarning($t, $this->formatErrors(xp::$errors), $timer->elapsedTime()))
+              ));
+            } else {
+              $this->notifyListeners('testSucceeded', array(
+                $result->setSucceeded($t, $timer->elapsedTime())
+              ));
+            }
+          } else if ($expected && !$expected[0]->isInstance($e)) {
             $this->notifyListeners('testFailed', array(
               $result->setFailed(
-                $test, 
-                new AssertionFailedError('Timeout', sprintf('%.3f', $timer->elapsedTime()), sprintf('%.3f', $eta)), 
+                $t,
+                new AssertionFailedError('Expected exception not caught', $e->getClassName(), $expected[0]->getName()),
                 $timer->elapsedTime()
               )
             ));
-          } else if ($expected[1] && !preg_match($expected[1], $e->getMessage())) {
+          } else if ($e instanceof AssertionFailedError) {
             $this->notifyListeners('testFailed', array(
-              $result->setFailed(
-                $test, 
-                new AssertionFailedError('Expected '.$e->getClassName().'\'s message differs', $e->getMessage(), $expected[1]),
-                $timer->elapsedTime()
-              )
+              $result->setFailed($t, $e, $timer->elapsedTime())
             ));
-          } else if (sizeof(xp::registry('errors')) > 0) {
-            $this->notifyListeners('testWarning', array(
-              $result->set($test, new TestWarning($test, $this->formatErrors(xp::registry('errors')), $timer->elapsedTime()))
+          } else if ($e instanceof PrerequisitesNotMetError) {
+            $this->notifyListeners('testSkipped', array(
+              $result->setSkipped($t, $e, $timer->elapsedTime())
             ));
           } else {
-            $this->notifyListeners('testSucceeded', array(
-              $result->setSucceeded($test, $timer->elapsedTime())
+            $this->notifyListeners('testError', array(
+              $result->set($t, new TestError($t, $e, $timer->elapsedTime()))
             ));
           }
-        } else if ($expected && !$expected[0]->isInstance($e)) {
+          xp::gc();
+          continue;
+        }
+
+        $timer->stop();
+        $tearDown($test);
+        
+        // Check expected exception
+        if ($expected) {
           $this->notifyListeners('testFailed', array(
             $result->setFailed(
-              $test, 
-              new AssertionFailedError('Expected exception not caught', $e->getClassName(), $expected[0]->getName()),
+              $t,
+              new AssertionFailedError('Expected exception not caught', NULL, $expected[0]->getName()),
               $timer->elapsedTime()
             )
           ));
-        } else if ($e instanceof AssertionFailedError) {
+        } else if (sizeof(xp::$errors) > 0) {
+          $this->notifyListeners('testWarning', array(
+            $result->set($t, new TestWarning($t, $this->formatErrors(xp::$errors), $timer->elapsedTime()))
+          ));
+        } else if ($eta && $timer->elapsedTime() > $eta) {
           $this->notifyListeners('testFailed', array(
-            $result->setFailed($test, $e, $timer->elapsedTime())
+            $result->setFailed(
+              $t,
+              new AssertionFailedError('Timeout', sprintf('%.3f', $timer->elapsedTime()), sprintf('%.3f', $eta)), 
+              $timer->elapsedTime()
+            )
           ));
         } else {
-          $this->notifyListeners('testError', array(
-            $result->set($test, new TestError($test, $e, $timer->elapsedTime()))
+          $this->notifyListeners('testSucceeded', array(
+            $result->setSucceeded($t, $timer->elapsedTime())
           ));
         }
         xp::gc();
-        return;
       }
-
-      $timer->stop();
-      $test->tearDown();
-      
-      // Check expected exception
-      if ($expected) {
-        $this->notifyListeners('testFailed', array(
-          $result->setFailed(
-            $test, 
-            new AssertionFailedError('Expected exception not caught', NULL, $expected[0]->getName()),
-            $timer->elapsedTime()
-          )
-        ));
-      } else if (sizeof(xp::registry('errors')) > 0) {
-        $this->notifyListeners('testWarning', array(
-          $result->set($test, new TestWarning($test, $this->formatErrors(xp::registry('errors')), $timer->elapsedTime()))
-        ));
-      } else if ($eta && $timer->elapsedTime() > $eta) {
-        $this->notifyListeners('testFailed', array(
-          $result->setFailed(
-            $test, 
-            new AssertionFailedError('Timeout', sprintf('%.3f', $timer->elapsedTime()), sprintf('%.3f', $eta)), 
-            $timer->elapsedTime()
-          )
-        ));
-      } else {
-        $this->notifyListeners('testSucceeded', array(
-          $result->setSucceeded($test, $timer->elapsedTime())
-        ));
-      }
-      xp::gc();
     }
     
     /**
@@ -386,7 +482,51 @@
         call_user_func_array(array($l, $method), $args);
       }
     }
+
+    /**
+     * Call beforeClass methods if present. If any of them throws an exception,
+     * mark all tests in this class as skipped and continue with tests from
+     * other classes (if available)
+     *
+     * @param  lang.XPClass class
+     */
+    protected function beforeClass($class) {
+      foreach ($this->actionsFor($class, 'unittest.TestClassAction') as $action) {
+        $action->beforeTestClass($class);
+      }
+      foreach ($class->getMethods() as $m) {
+        if (!$m->hasAnnotation('beforeClass')) continue;
+        try {
+          $m->invoke(NULL, array());
+        } catch (TargetInvocationException $e) {
+          $cause= $e->getCause();
+          if ($cause instanceof PrerequisitesNotMetError) {
+            throw $cause;
+          } else {
+            throw new PrerequisitesNotMetError('Exception in beforeClass method '.$m->getName(), $cause);
+          }
+        }
+      }
+    }
     
+    /**
+     * Call afterClass methods of the last test's class. Ignore any 
+     * exceptions thrown from these methods.
+     *
+     * @param  lang.XPClass class
+     */
+    protected function afterClass($class) {
+      foreach ($class->getMethods() as $m) {
+        if (!$m->hasAnnotation('afterClass')) continue;
+        try {
+          $m->invoke(NULL, array());
+        } catch (TargetInvocationException $ignored) { }
+      }
+      foreach ($this->actionsFor($class, 'unittest.TestClassAction') as $action) {
+        $action->afterTestClass($class);
+      }
+    }
+
     /**
      * Run a single test
      *
@@ -396,42 +536,23 @@
      * @throws  lang.MethodNotImplementedException in case given argument is not a valid testcase
      */
     public function runTest(TestCase $test) {
-      if (!$test->getClass()->hasMethod($test->name)) {
+      $class= $test->getClass();
+      if (!$class->hasMethod($test->name)) {
         throw new MethodNotImplementedException('Test method does not exist', $test->name);
       }
       $this->notifyListeners('testRunStarted', array($this));
+
+      // Run the single test
       $result= new TestResult();
-      
-      // Check for methods annotated with beforeClass. If it throws an exception,
-      // mark test as skipped (using thrown exception as reason)
-      foreach ($test->getClass()->getMethods() as $m) {
-        if (!$m->hasAnnotation('beforeClass')) continue;
-        
-        try {
-          $m->invoke(NULL, array());
-        } catch (TargetInvocationException $e) {
-          $this->notifyListeners('testSkipped', array(
-            $result->setSkipped($test, $e->getCause(), 0.0)
-          ));
-          $this->notifyListeners('testRunFinished', array($this, $result));
-          return;
-        }
-        break;
+      try {
+        $this->beforeClass($class);
+        $this->runInternal($test, $result);
+        $this->afterClass($class);
+      } catch (PrerequisitesNotMetError $e) {
+        $this->notifyListeners('testSkipped', array($result->setSkipped($test, $e, 0.0)));
       }
 
-      // Run the single test case
-      $this->runInternal($test, $result);
       $this->notifyListeners('testRunFinished', array($this, $result));
-
-      // Check for methods annotated with afterClass
-      foreach ($test->getClass()->getMethods() as $m) {
-        if (!$m->hasAnnotation('afterClass')) continue;
-        try {
-          $m->invoke(NULL, array());
-        } catch (TargetInvocationException $ignored) { }
-        break;
-      }
-      unset(xp::$registry['details.'.$test->getClassName()]); // TODO: xp::gc();
       return $result;
     }
     
@@ -447,42 +568,19 @@
       foreach ($this->order as $classname => $tests) {
         $class= XPClass::forName($classname);
 
-        // Call beforeClass method if present. If it throws an exception,
-        // mark all tests in this class as skipped and continue with tests
-        // from other classes (if available)
-        foreach ($class->getMethods() as $m) {
-          if (!$m->hasAnnotation('beforeClass')) continue;
-          try {
-            $m->invoke(NULL, array());
-          } catch (TargetInvocationException $e) {
-            $cause= $e->getCause();
-            if ($cause instanceof PrerequisitesNotMetError) {
-              $reason= $cause;
-            } else {
-              $reason= new PrerequisitesNotMetError('Exception in beforeClass method '.$m->getName(), $cause);
-            }
-            foreach ($tests as $i) {
-              $this->notifyListeners('testSkipped', array($result->setSkipped($this->tests[$i], $reason, 0.0)));
-            }
-            continue 2;
+        // Run all tests in this class
+        try {
+          $this->beforeClass($class);
+        } catch (PrerequisitesNotMetError $e) {
+          foreach ($tests as $i) {
+            $this->notifyListeners('testSkipped', array($result->setSkipped($this->tests[$i], $e, 0.0)));
           }
-          break;
+          continue;
         }
-        
         foreach ($tests as $i) {
           $this->runInternal($this->tests[$i], $result);
         }
-
-        // Call afterClass method of the last test's class. Ignore any
-        // exceptions thrown from this method.
-        foreach ($class->getMethods() as $m) {
-          if (!$m->hasAnnotation('afterClass')) continue;
-          try {
-            $m->invoke(NULL, array());
-          } catch (TargetInvocationException $ignored) { }
-          break;
-        }
-        unset(xp::$registry['details.'.$class->getName()]);  // TODO: xp::gc();
+        $this->afterClass($class);
       }
 
       $this->notifyListeners('testRunFinished', array($this, $result));

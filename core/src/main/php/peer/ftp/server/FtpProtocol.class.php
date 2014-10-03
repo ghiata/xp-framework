@@ -34,6 +34,7 @@
 
     public
       $sessions         = array(),
+      $timeout          = 300.0,      // 5 minutes
       $cat              = NULL,
       $authenticator    = NULL,
       $storage          = NULL,
@@ -668,7 +669,7 @@
         $entry->close();
       } catch (XPException $e) {
         $this->answer($socket, 550, $params.': '.$e->getMessage());
-      } finally(); {
+      } ensure($e); {
         $dataSocket->close();
         if ($e) return;
       }
@@ -719,7 +720,7 @@
         $entry->close();
       } catch (XPException $e) {
         $this->answer($socket, 550, $params.': '.$e->getMessage());
-      } finally(); {
+      } ensure($e); {
         $dataSocket->close();
         if ($e) return;
       }
@@ -930,11 +931,9 @@
     public function onPasv($socket, $params) {
       $this->mode[$socket->hashCode()]= self::DATA_PASSIVE;
 
-      if ($this->datasock[$socket->hashCode()]) {
-        $port= $this->datasock[$socket->hashCode()]->port;   // Recycle it!
-      } else {      
-        $port= rand(1000, 65536);
-        $this->datasock[$socket->hashCode()]= new ServerSocket($this->server->socket->host, $port);
+      // Open a new server socket if non exists
+      if (!$this->datasock[$socket->hashCode()]) {
+        $this->datasock[$socket->hashCode()]= new ServerSocket($socket->localEndpoint()->getHost(), 0);
         try {
           $this->datasock[$socket->hashCode()]->create();
           $this->datasock[$socket->hashCode()]->bind();
@@ -945,7 +944,10 @@
           return;
         }
       }
+
+      // Enter passive
       $this->cat && $this->cat->debug('Passive mode: Data socket is', $this->datasock[$socket->hashCode()]);
+      $port= $this->datasock[$socket->hashCode()]->port;
       $octets= strtr(gethostbyname($this->server->socket->host), '.', ',').','.($port >> 8).','.($port & 0xFF);
       $this->answer($socket, 227, 'Entering passive mode ('.$octets.')');
     }
@@ -961,6 +963,7 @@
       // Create a new session object for this client
       $this->sessions[$socket->hashCode()]= new FtpSession();
       $this->answer($socket, 220, 'FTP server ready');
+      $socket->setTimeout($this->timeout);
     }
     
     /**
@@ -1021,7 +1024,7 @@
      * @param   lang.XPException e
      */
     public function handleError($socket, $e) {
-      $this->cat && $this->cat->debugf('Client %s I/O error', $socket->host, ' ~ ', $e);
+      $this->cat && $this->cat->debugf('Client %s I/O error ~ %s', $socket->host, $e->toString());
       
       // Kill associated session
       delete($this->sessions[$socket->hashCode()]);

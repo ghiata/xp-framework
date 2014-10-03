@@ -205,29 +205,15 @@
     }
   
     /**
-     * Register or retrieve a mapping for a package.
+     * Retrieve a mapping for a package.
      *
-     * This method should only be used to retrieve package
-     * mappings. Registering functionality will be removed
-     * in future versions.
-     *
-     * @deprecated
-     * @param   string name
-     * @param   string replace
-     * @return  string replaced
+     * @param   string remote
+     * @param   string mapped
      */
-    public function packageMapping($name, $replace= NULL) {
-      if (NULL !== $replace) {
-        $this->packages[$name]= $replace;     // BC
-        $this->packages[0][$name]= $replace;
-      }
-
-      return $name == strtr($name, $this->packages)
-        ? strtr($name, $this->packages[0])
-        : strtr($name, $this->packages)      // BC
-      ;
+    public function packageMapping($remote) {
+      return strtr($remote, $this->packages[0]);
     }
-        
+
     /**
      * Map a remote package name to a local package
      *
@@ -266,55 +252,35 @@
         'T'   => new ClassReference('util.Date')
       );
 
-      $token= $serialized->buffer{$serialized->offset};
-      $serialized->offset+= 2; 
+      $token= $serialized->consumeToken();
       switch ($token) {
-        case 'N': {     // null
-          $value= NULL;
-          return $value;
-        }
-
-        case 'b': {     // booleans
-          $value= (bool)$serialized->consumeWord();
-          return $value;
-        }
-
-        case 'i': {     // integers
-          $value= (int)$serialized->consumeWord();
-          return $value;
-        }
-
-        case 'd': {     // decimals
-          $value= (float)$serialized->consumeWord();
-          return $value;
-        }
-
-        case 's': {     // strings
-          $value= $serialized->consumeString();
-          return $value;
-        }
+        case 'N': return NULL;
+        case 'b': return (bool)$serialized->consumeWord();
+        case 'i': return (int)$serialized->consumeWord();
+        case 'd': return (float)$serialized->consumeWord();
+        case 's': return $serialized->consumeString();
 
         case 'a': {     // arrays
           $a= array();
           $size= $serialized->consumeSize();
-          $serialized->offset++;  // Opening "{"
+          $serialized->consume('{');
           for ($i= 0; $i < $size; $i++) {
             $key= $this->valueOf($serialized, $context);
             $a[$key]= $this->valueOf($serialized, $context);
           }
-          $serialized->offset++;  // Closing "}"
+          $serialized->consume('}');
           return $a;
         }
 
         case 'E': {     // generic exceptions
           $instance= new ExceptionReference($serialized->consumeString());
           $size= $serialized->consumeSize();
-          $serialized->offset++;  // Opening "{"
+          $serialized->consume('{');
           for ($i= 0; $i < $size; $i++) {
             $member= $this->valueOf($serialized, $context);
             $instance->{$member}= $this->valueOf($serialized, $context);
           }
-          $serialized->offset++; // Closing "}"
+          $serialized->consume('}');
           return $instance;
         }
         
@@ -326,18 +292,18 @@
           } catch (ClassNotFoundException $e) {
             $instance= new UnknownRemoteObject($name);
             $size= $serialized->consumeSize();
-            $serialized->offset++;  // Opening "{"
+            $serialized->consume('{');
             for ($i= 0; $i < $size; $i++) {
               $member= $this->valueOf($serialized, $context);
               $members[$member]= $this->valueOf($serialized, $context);
             }
-            $serialized->offset++; // Closing "}"
+            $serialized->consume('}');
             $instance->__members= $members;
             return $instance;
           }
           
           $size= $serialized->consumeSize();
-          $serialized->offset++;  // Opening "{"
+          $serialized->consume('{');
 
           if ($class->isEnum()) {
             if ($size != 1 || 'name' != $this->valueOf($serialized, $context)) {
@@ -356,7 +322,7 @@
             }
           }
           
-          $serialized->offset++; // Closing "}"
+          $serialized->consume('}');
           return $instance;
         }
 
@@ -369,8 +335,7 @@
         }
         
         case 'C': {     // generic classes
-          $value= new ClassReference(strtr($serialized->consumeString(), $this->packages[0]));
-          return $value;
+          return new ClassReference(strtr($serialized->consumeString(), $this->packages[0]));
         }
 
         default: {      // default, check if we have a mapping

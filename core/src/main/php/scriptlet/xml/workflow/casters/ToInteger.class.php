@@ -9,7 +9,7 @@
   /**
    * Casts given values to integers
    *
-   * @purpose  Caster
+   * @test xp://net.xp_framework.unittest.scriptlet.workflow.ToIntegerTest
    */
   class ToInteger extends ParamCaster {
   
@@ -18,8 +18,8 @@
      *
      * @see     php://intval
      * @see     xp://scriptlet.xml.workflow.casters.ParamCaster
-     * @param   array value
-     * @return  array value
+     * @param   string[] value
+     * @return  int[] value
      */
     public function castValue($value) {
       $return= array();
@@ -30,7 +30,6 @@
           if (0 == ($return[$k]= intval($v))) return NULL;
         }
       }
-
       return $return;
     }
   }

@@ -62,25 +62,28 @@
       if (is_object($this->handle)) return TRUE;  // Already connected
       if (!$reconnect && (FALSE === $this->handle)) return FALSE;    // Previously failed connecting
 
+      $this->_obs && $this->notifyObservers(new DBEvent(DBEvent::CONNECT, $reconnect));
+
       // Connect via local sockets if "." is passed. This will not work on
       // Windows with the mysqlnd extension (see PHP bug #48082: "mysql_connect
       // does not work with named pipes"). For mysqlnd, we default to mysqlx
       // anyways, so this works transparently.
       $host= $this->dsn->getHost();
+      $sock= NULL;
       if ('.' === $host) {
         $sock= $this->dsn->getProperty('socket', NULL);
         if (0 === strncasecmp(PHP_OS, 'Win', 3)) {
-          $connect= '.';
+          $host= '.';
           if (NULL !== $sock) $sock= substr($sock, 9);   // 9 = strlen("\\\\.\\pipe\\")
         } else {
-          $connect= 'localhost';
+          $host= 'localhost';
         }
       } else if ('localhost' === $host) {
-        $connect= '127.0.0.1';   // Force TCP/IP
+        $host= '127.0.0.1';   // Force TCP/IP
       }
 
       $this->handle= mysqli_connect(
-        ($this->flags & DB_PERSISTENT ? 'p:' : '').$connect,
+        ($this->flags & DB_PERSISTENT ? 'p:' : '').$host,
         $this->dsn->getUser(), 
         $this->dsn->getPassword(),
         $this->dsn->getDatabase(),
@@ -88,7 +91,7 @@
         $sock
       );
 
-      $this->_obs && $this->notifyObservers(new DBEvent(__FUNCTION__, $reconnect));
+      $this->_obs && $this->notifyObservers(new DBEvent(DBEvent::CONNECTED, $reconnect));
 
       if (!is_object($this->handle)) {
         $e= new SQLConnectException('#'.mysqli_connect_errno().': '.mysqli_connect_error(), $this->dsn);
@@ -156,7 +159,7 @@
      */
     public function identity($field= NULL) {
       $i= $this->query('select last_insert_id() as xp_id')->next('xp_id');
-      $this->_obs && $this->notifyObservers(new DBEvent(__FUNCTION__, $i));
+      $this->_obs && $this->notifyObservers(new DBEvent(DBEvent::IDENTITY, $i));
       return $i;
     }
 

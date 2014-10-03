@@ -7,6 +7,7 @@
   uses(
     'peer.ConnectException',
     'peer.SocketTimeoutException',
+    'peer.SocketEndpoint',
     'peer.SocketException',
     'peer.SocketInputStream',
     'peer.SocketOutputStream'
@@ -27,8 +28,11 @@
       
     public
       $_sock    = NULL,
-      $_prefix  = '',
+      $_prefix  = 'tcp://',
       $_timeout = 60;
+
+    private
+      $context  = NULL;
     
     /**
      * Constructor
@@ -45,8 +49,57 @@
       $this->host= $host;
       $this->port= $port;
       $this->_sock= $socket;
+      $this->context= stream_context_create();
+    }
+
+    /**
+     * Returns remote endpoint
+     *
+     * @return  peer.SocketEndpoint
+     */
+    public function remoteEndpoint() {
+      return new SocketEndpoint($this->host, $this->port);
+    }
+
+    /**
+     * Returns local endpoint
+     *
+     * @return  peer.SocketEndpoint
+     * @throws  peer.SocketException
+     */
+    public function localEndpoint() {
+      if (is_resource($this->_sock)) {
+        if (FALSE === ($addr= stream_socket_get_name($this->_sock, FALSE))) {
+          throw new SocketException('Cannot get socket name on '.$this->_sock);
+        }
+        return SocketEndpoint::valueOf($addr);
+      }
+      return NULL;    // Not connected
+    }
+
+    /**
+     * Set option on socket context
+     *
+     * @param   string wrapper 'ssl', 'tcp', 'ftp'
+     * @param   string option
+     * @param   var value
+     */
+    protected function setSocketOption($wrapper, $option, $value) {
+      stream_context_set_option($this->context, $wrapper, $option, $value);
     }
     
+    /**
+     * Retrieve option on socket context
+     *
+     * @param   string wrapper
+     * @param   string option
+     * @param   var
+     */
+    protected function getSocketOption($wrapper, $option) {
+      $options= stream_context_get_options($this->context);
+      return @$options[$wrapper][$option];
+    }
+
     /**
      * Get last error. A very inaccurate way of going about error messages since
      * any PHP error/warning is returned - but since there's no function like
@@ -55,8 +108,7 @@
      * @return  string error
      */  
     public function getLastError() {
-      $e= xp::$registry['errors'];
-      return isset($e[__FILE__]) ? key(end($e[__FILE__])) : 'unknown error';
+      return isset(xp::$errors[__FILE__]) ? key(end(xp::$errors[__FILE__])) : 'unknown error';
     }
     
     /**
@@ -89,12 +141,13 @@
     public function connect($timeout= 2.0) {
       if ($this->isConnected()) return TRUE;
       
-      if (!$this->_sock= fsockopen(
-        $this->_prefix.(string)$this->host,
-        $this->port,
+      if (!$this->_sock= stream_socket_client(
+        $this->_prefix.(string)$this->host.':'.$this->port,
         $errno,
         $errstr,
-        $timeout
+        $timeout,
+        STREAM_CLIENT_CONNECT,
+        $this->context
       )) {
         $e= new ConnectException(sprintf(
           'Failed connecting to %s:%s within %s seconds [%d: %s]',
@@ -108,7 +161,7 @@
         throw $e;
       }
       
-      socket_set_timeout($this->_sock, $this->_timeout);
+      stream_set_timeout($this->_sock, $this->_timeout);
       return TRUE;
     }
 
@@ -136,7 +189,7 @@
       
       // Apply changes to already opened connection
       if (is_resource($this->_sock)) {
-        socket_set_timeout($this->_sock, $this->_timeout);
+        stream_set_timeout($this->_sock, $this->_timeout);
       }
     }
 
@@ -158,7 +211,7 @@
      * @see     php://socket_set_blocking
      */
     public function setBlocking($blockMode) {
-      if (FALSE === socket_set_blocking($this->_sock, $blockMode)) {
+      if (FALSE === stream_set_blocking($this->_sock, $blockMode)) {
         $e= new SocketException('Set blocking call failed: '.$this->getLastError());
         xp::gc(__FILE__);
         throw $e;
@@ -190,8 +243,8 @@
       //   parameters detected" warning which is no error, see PHP bug #49948
       // * On Un*x OS flavors, when select() raises a warning, this *is* an 
       //   error (regardless of the return value)
-      if (isset(xp::$registry['errors'][__FILE__])) {
-        if (isset(xp::$registry['errors'][__FILE__][$l]['Invalid CRT parameters detected'])) {
+      if (isset(xp::$errors[__FILE__])) {
+        if (isset(xp::$errors[__FILE__][$l]['Invalid CRT parameters detected'])) {
           xp::gc(__FILE__);
         } else {
           $n= FALSE;

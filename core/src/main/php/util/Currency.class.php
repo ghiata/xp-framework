@@ -10,7 +10,8 @@
    * Currency enumeration. Currencies are identified by their ISO 4217 
    * currency codes.
    *
-   * @see      http://www.xe.com/iso4217.php ISO 4217 Currency Code List
+   * @test  xp://net.xp_framework.unittest.util.CurrencyTest
+   * @see   http://www.xe.com/iso4217.php ISO 4217 Currency Code List
    */
   class Currency extends Enum {
     public static
@@ -212,15 +213,6 @@
       self::$ZAR= new self(168, 'ZAR');
       self::$ZMK= new self(169, 'ZMK');
       self::$ZWD= new self(170, 'ZWD');
-    }
-
-    /**
-     * Returns all enum members
-     *
-     * @return  lang.Enum[]
-     */
-    public static function values() {
-      return parent::membersOf(__CLASS__);
     }
     
     /**

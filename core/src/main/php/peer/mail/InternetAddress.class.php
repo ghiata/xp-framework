@@ -94,8 +94,8 @@
       static $matches= array(
         '/^=\?([^\?])+\?([QB])\?([^\?]+)\?= <([^ @]+@[0-9a-z.-]+)>$/i' => 3,
         '/^<?([^ @]+@[0-9a-z.-]+)>?$/i'                                => 0,
+        '/^"([^"]+)" <([^ @]+@[0-9a-z.-]+)>$/i'                        => 2,
         '/^([^<]+) <([^ @]+@[0-9a-z.-]+)>$/i'                          => 2,
-        '/^"([^"]+)" <([^ @]+@[0-9a-z.-]+)>$/i'                        => 1,
         '/^([^ @]+@[0-9a-z.-]+) \(([^\)]+)\)$/i'                       => 1,
       );
       
@@ -131,13 +131,13 @@
      * - Empty personal:     <friebe@example.com>  
      * </pre>
      *
-     * @param   string charset default 'iso-8859-1'
+     * @param   string charset defaults to XP default encoding
      * @return  string
      */
-    public function toString($charset= 'iso-8859-1') {
+    public function toString($charset= xp::ENCODING) {
       return (
         empty($this->personal) ? '' : 
-        QuotedPrintable::encode($this->personal, $charset).' '
+        QuotedPrintable::encode(iconv(xp::ENCODING, $charset, $this->personal), $charset).' '
       ).'<'.$this->localpart.'@'.$this->domain.'>';
     }
   }

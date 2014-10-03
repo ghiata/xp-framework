@@ -122,6 +122,12 @@
         'array'     => 'var[]',
         'resource'  => 'var'
       );
+      static $primitives= array(
+        'string'    => TRUE,
+        'int'       => TRUE,
+        'double'    => TRUE,
+        'bool'      => TRUE
+      );
       
       // Map deprecated type names
       $type= isset($deprecated[$name]) ? $deprecated[$name] : $name;
@@ -132,7 +138,7 @@
       // * T* is a vararg
       // * T<K, V> is a generic
       // * Anything else is a qualified or unqualified class name
-      if ('string' === $type || 'int' === $type || 'double' === $type || 'bool' == $type) {
+      if (isset($primitives[$type])) {
         return Primitive::forName($type);
       } else if ('var' === $type) {
         return self::$VAR;
@@ -186,6 +192,16 @@
      */
     public function isInstance($obj) {
       return self::$VAR === $this;      // VAR is always true, VOID never
+    }
+
+    /**
+     * Tests whether this type is assignable from another type
+     *
+     * @param   var type
+     * @return  bool
+     */
+    public function isAssignableFrom($type) {
+      return self::$VAR === $this;      // VAR is always assignable, VOID never
     }
   }
 ?>

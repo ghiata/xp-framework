@@ -1,2 +1,4 @@
 src/main/php
+src/main/resources
 src/test/php
+src/test/resources

@@ -28,10 +28,10 @@
      * Start writing a document
      *
      * @param   string version default "1.0"
-     * @param   string encoding default "iso-8859-1"
+     * @param   string encoding defaults to XP default encoding
      * @param   bool standalone default FALSE
      */
-    public function startDocument($version= '1.0', $encoding= 'iso-8859-1', $standalone= FALSE) {
+    public function startDocument($version= '1.0', $encoding= xp::ENCODING, $standalone= FALSE) {
       $this->stream->write(sprintf(
         '<?xml version="%s" encoding="%s"%s?>',
         $version,
@@ -59,7 +59,7 @@
     public function startElement($name, $attributes= array()) {
       $this->stream->write('<'.$name);
       foreach ($attributes as $key => $value) {
-        $this->stream->write(' '.$key.'="'.htmlspecialchars($value).'"');
+        $this->stream->write(' '.$key.'="'.htmlspecialchars($value, ENT_COMPAT, xp::ENCODING).'"');
       }
       $this->stream->write('>');
       $this->stack[]= '</'.$name.'>';
@@ -151,7 +151,7 @@
      * @param   string content
      */
     public function writeText($content) {
-      $this->stream->write(htmlspecialchars($content));
+      $this->stream->write(htmlspecialchars($content, ENT_COMPAT, xp::ENCODING));
     }
 
     /**
@@ -193,7 +193,7 @@
       $this->stream->write('<?'.$target);
       if (is_array($content)) {
         foreach ($content as $key => $value) {
-          $this->stream->write(' '.$key.'="'.htmlspecialchars($value).'"');
+          $this->stream->write(' '.$key.'="'.htmlspecialchars($value, ENT_COMPAT, xp::ENCODING).'"');
         }
         $this->stream->write('?>');
       } else {
@@ -211,13 +211,13 @@
     public function writeElement($name, $content= NULL, $attributes= array()) {
       $this->stream->write('<'.$name);
       foreach ($attributes as $key => $value) {
-        $this->stream->write(' '.$key.'="'.htmlspecialchars($value).'"');
+        $this->stream->write(' '.$key.'="'.htmlspecialchars($value, ENT_COMPAT, xp::ENCODING).'"');
       }
       
       if (NULL === $content) {
         $this->stream->write('/>');
       } else {
-        $this->stream->write('>'.htmlspecialchars($content).'</'.$name.'>');
+        $this->stream->write('>'.htmlspecialchars($content, ENT_COMPAT, xp::ENCODING).'</'.$name.'>');
       }
     }
   }

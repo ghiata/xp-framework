@@ -1,50 +1,38 @@
-<?php
-/* This class is part of the XP framework
+<?php namespace net\xp_framework\unittest\scriptlet\workflow;
+
+use scriptlet\xml\workflow\casters\ToInteger;
+
+
+/**
+ * Test the ToInteger caster
  *
- * $Id$
+ * @see  xp://net.xp_framework.unittest.scriptlet.workflow.AbstractCasterTest
+ * @see  xp://scriptlet.xml.workflow.casters.ToInteger
  */
+class ToIntegerTest extends AbstractCasterTest {
 
-  uses(
-    'net.xp_framework.unittest.scriptlet.workflow.AbstractCasterTest',
-    'scriptlet.xml.workflow.casters.ToInteger'
-  );
-  
   /**
-   * Test the ToInteger caster
+   * Return the caster
    *
-   * @see       xp://net.xp_framework.unittest.scriptlet.workflow.AbstractCasterTest
-   * @see       scriptlet.xml.workflow.casters.ToInteger
-   * @purpose   ToInteger test
+   * @return  scriptlet.xml.workflow.casters.ParamCaster
    */
-  class ToIntegerTest extends AbstractCasterTest {
-
-    /**
-     * Return the caster
-     *
-     * @return  &scriptlet.xml.workflow.casters.ParamCaster
-     */
-    protected function caster() {
-      return new ToInteger();
-    }
-
-    /**
-     * Test positive and negative numbers
-     *
-     */
-    #[@test]
-    public function wholeNumbers() {
-      foreach (array('1' => 1, '-1' => -1, '0' => 0) as $input => $expect) {
-        $this->assertEquals($expect, $this->castValue($input), $input);
-      }
-    }
-
-    /**
-     * Test empty input
-     *
-     */
-    #[@test]
-    public function emptyInput() {
-      $this->assertEquals(0, $this->castValue(''));
-    }
+  protected function caster() {
+    return new ToInteger();
   }
-?>
+
+  /**
+   * Test positive and negative numbers
+   */
+  #[@test, @values(array(array('1', 1), array('-1', -1), array('0', 0)))]
+  public function wholeNumbers($input, $expect) {
+    $this->assertEquals($expect, $this->castValue($input), $input);
+  }
+
+  /**
+   * Test empty input
+   */
+  #[@test]
+  public function emptyInput() {
+    $this->assertEquals(0, $this->castValue(''));
+  }
+}

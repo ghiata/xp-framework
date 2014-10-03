@@ -4,7 +4,7 @@
  * $Id$
  */
  
-  uses('scriptlet.Response', 'peer.http.HttpConstants');
+  uses('scriptlet.Response', 'scriptlet.ScriptletOutputStream', 'peer.http.HttpConstants');
  
   /**
    * Defines the response sent from the webserver to the client,
@@ -17,13 +17,15 @@
    * @see      xp://scriptlet.HttpScriptlet
    * @purpose  Provide a way to access the HTTP response
    */  
-  class HttpScriptletResponse extends Object implements Response {
+  class HttpScriptletResponse extends Object implements scriptlet·Response {
     protected
-      $uri=             NULL;
+      $uri=             NULL,
+      $committed=       FALSE,
+      $outputStream=    NULL;
     
     public
       $version=         '1.1',
-      $content=         '',
+      $content=         NULL,
       $statusCode=      HttpConstants::STATUS_OK,
       $headers=         array();
     
@@ -111,7 +113,7 @@
      * @return  bool
      */
     public function isCommitted() {
-      return headers_sent();
+      return $this->committed;
     }
 
     /**
@@ -120,21 +122,10 @@
      * @param   io.streams.OutputStream
      */
     public function getOutputStream() {
-      return newinstance('io.streams.OutputStream', array($this), '{
-        protected $response;
-        public function __construct($r) {
-          $this->response= $r;
-        }
-        public function write($arg) {
-          $this->response->write($arg);
-        }
-        public function flush() {
-          $this->response->flush();
-        }
-        public function close() {
-          $this->response->flush();
-        }
-      }');
+      if (null === $this->outputStream) {
+        $this->outputStream= new ScriptletOutputStream($this);
+      }
+      return $this->outputStream;
     }
     
     /**
@@ -200,19 +191,27 @@
      *
      */
     public function flush() {
-      if (headers_sent($file, $line))
+      if ($this->committed) {
+        headers_sent($file, $line);
         throw new IllegalStateException('Headers have already been sent at: '.$file.', line '.$line);
-        
-      switch (php_sapi_name()) {
-        case 'cgi':
-          header('Status: '.$this->statusCode);
-          break;
+      }
 
-        default:
-          header(sprintf('HTTP/%s %d', $this->version, $this->statusCode));
-      } 
+      if ('cgi' === PHP_SAPI) {
+        header('Status: '.$this->statusCode);
+      } else {
+        header(sprintf('HTTP/%s %d', $this->version, $this->statusCode));
+      }
+
       foreach ($this->headers as $header) {
         header(strtr($header, array("\r" => '', "\n" => "\n\t")), FALSE);
+      }
+
+      $this->committed= TRUE;
+
+      // Flush buffer if not empty
+      if (NULL !== $this->content) {
+        echo $this->content;
+        $this->content= NULL;
       }
     }
 
@@ -256,7 +255,9 @@
      *
      */
     public function sendContent() {
-      echo $this->getContent();
+      if (NULL !== ($content= $this->getContent())) {
+        echo $content;
+      }
     }
     
     /**
@@ -265,7 +266,11 @@
      * @param   string s string to add to the content
      */
     public function write($s) {
-      $this->content.= $s;
+      if ($this->committed) {
+        echo $s;
+      } else {
+        $this->content.= $s;
+      }
     }
     
     /**

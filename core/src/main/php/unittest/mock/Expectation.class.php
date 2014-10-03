@@ -4,7 +4,7 @@
  * $Id$ 
  */
 
-  uses('unittest.mock.arguments.IArgumentMatcher');
+  uses('unittest.mock.arguments.IArgumentMatcher', 'util.Objects');
 
   /**
    * Expectation to a method call.
@@ -185,29 +185,34 @@
       if ($argVal instanceof IArgumentMatcher) {
         return $argVal->matches($value);
       } else {
-        return $this->_compare($argVal, $value);
+        return Objects::equal($argVal, $value);
       }
     }
 
     /**
-     * Checks whether the passed arguments are equal.
-     * 
-     * FIXME: This is a duplication from TestCase.
+     * Cerates a string representation
      *
-     * @param   var a
-     * @param   var b
-     * @return  boolean
+     * @return string
      */
-    private function _compare($a, $b) {
-      if (is_array($a)) {
-        if (!is_array($b) || sizeof($a) != sizeof($b)) return FALSE;
-        foreach (array_keys($a) as $key) {
-          if (!$this->_compare($a[$key], $b[$key])) return FALSE;
-        }
-        return TRUE;
-      }
-
-      return $a instanceof Generic ? $a->equals($b) : $a === $b;
+    public function toString() {
+      return sprintf(
+        "%s(Calling %s(%d arg(s)) %s)@{\n".
+        "  [args                ] %s\n".
+        "  [return              ] %s\n".
+        "  [exception           ] %s\n".
+        "  [isInPropertyBehavior] %s\n".
+        "  [actualCalls         ] %d\n".
+        "}",
+        $this->getClassName(),
+        $this->methodName,
+        sizeof($this->args),
+        $this->repeat === -1 ? '**' : '* '.$this->repeat,
+        xp::stringOf($this->args, '  '),
+        xp::stringOf($this->return, '  '),
+        xp::stringOf($this->exception, '  '),
+        xp::stringOf($this->isInPropertyBehavior),
+        $this->actualCalls
+      );
     }
   }
 ?>

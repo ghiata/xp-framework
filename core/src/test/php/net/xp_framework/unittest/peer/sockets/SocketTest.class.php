@@ -1,30 +1,24 @@
-<?php
-/* This class is part of the XP framework
+<?php namespace net\xp_framework\unittest\peer\sockets;
+
+use net\xp_framework\unittest\StartServer;
+use peer\Socket;
+
+/**
+ * TestCase
  *
- * $Id$ 
+ * @see      xp://peer.Socket
  */
-
-  uses(
-    'net.xp_framework.unittest.peer.sockets.AbstractSocketTest',
-    'peer.Socket'
-  );
-
+#[@action(new StartServer('net.xp_framework.unittest.peer.sockets.TestingServer', 'connected', 'shutdown'))]
+class SocketTest extends AbstractSocketTest {
+  
   /**
-   * TestCase
+   * Creates a new client socket
    *
-   * @see      xp://peer.Socket
+   * @param   string addr
+   * @param   int port
+   * @return  peer.Socket
    */
-  class SocketTest extends AbstractSocketTest {
-    
-    /**
-     * Creates a new client socket
-     *
-     * @param   string addr
-     * @param   int port
-     * @return  peer.Socket
-     */
-    protected function newSocket($addr, $port) {
-      return new Socket($addr, $port);
-    }
+  protected function newSocket($addr, $port) {
+    return new Socket($addr, $port);
   }
-?>
+}

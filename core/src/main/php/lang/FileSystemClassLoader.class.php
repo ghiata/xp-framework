@@ -10,6 +10,7 @@
    * Loads a class from the filesystem
    * 
    * @test  xp://net.xp_framework.unittest.reflection.ClassLoaderTest
+   * @test  xp://net.xp_framework.unittest.reflection.ClassFromFileSystemTest
    * @see   xp://lang.XPClass#forName
    */
   class FileSystemClassLoader extends AbstractClassLoader {
@@ -43,7 +44,8 @@
      * @return  bool
      */
     public function providesClass($class) {
-      return is_file($this->path.strtr($class, '.', DIRECTORY_SEPARATOR).xp::CLASS_FILE_EXT);
+      $f= $this->path.strtr($class, '.', DIRECTORY_SEPARATOR).xp::CLASS_FILE_EXT;
+      return $f === realpath($f);
     }
     
     /**
@@ -77,6 +79,33 @@
     }
 
     /**
+     * Return a class at the given URI
+     *
+     * @param   string uri
+     * @return  string fully qualified class name, or NULL
+     */
+    protected function classAtUri($uri) {
+      if (0 !== substr_compare($uri, xp::CLASS_FILE_EXT, -strlen(xp::CLASS_FILE_EXT))) return NULL;
+
+      // Resolve path if not absolute
+      if ((DIRECTORY_SEPARATOR === $uri{0} || (':' === $uri{1} && '\\' === $uri{2}))) {
+        $absolute= realpath($uri);
+      } else {
+        $absolute= realpath($this->path.DIRECTORY_SEPARATOR.$uri);
+      }
+
+      // Verify path is inside this path, exists and is a file
+      $l= strlen($this->path);
+      if (FALSE === $absolute || 0 !== strncmp($absolute, $this->path, $l) || !is_file($absolute)) return NULL;
+
+      return strtr(
+        substr($absolute, $l, -strlen(xp::CLASS_FILE_EXT)),
+        '/'.DIRECTORY_SEPARATOR,
+        '..'
+      );
+    }
+
+    /**
      * Loads a resource.
      *
      * @param   string filename name of resource
@@ -101,7 +130,7 @@
       if (!is_file($fn= $this->path.strtr($filename, '/', DIRECTORY_SEPARATOR))) {
         return raise('lang.ElementNotFoundException', 'Could not load resource '.$filename);
       }
-      return new File($fn);
+      return new \io\File($fn);   // Trigger autoloading!
     }
 
     /**

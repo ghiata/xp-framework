@@ -1,116 +1,109 @@
-<?php
-/* This class is part of the XP framework
- *
- * $Id$ 
- */
+<?php namespace net\xp_framework\unittest\text\csv;
 
-  uses(
-    'unittest.TestCase',
-    'text.csv.Quoting'
-  );
+use unittest\TestCase;
+use text\csv\Quoting;
+
+
+/**
+ * TestCase
+ *
+ * @see      xp://text.csv.Quoting
+ */
+class QuotingTest extends TestCase {
+  private static $never;
 
   /**
-   * TestCase
-   *
-   * @see      xp://text.csv.Quoting
+   * Creating a quoting strategy that never quotes anything. This is
+   * for unittesting purposes only, such a strategy would not make
+   * sense in real-life situations!
    */
-  class QuotingTest extends TestCase {
-  
-    /**
-     * Test ';' is quoted in default strategy
-     *
-     */
-    #[@test]
-    public function delimiterQuotedInDefault() {
-      $this->assertTrue(text搾sv想uoting::$DEFAULT->necessary(';', ';', '"'), 'DEFAULT');
-      $this->assertTrue(text搾sv想uoting::$EMPTY->necessary(';', ';', '"'), 'EMPTY');
-    }
-
-    /**
-     * Test '"' is quoted in default strategy
-     *
-     */
-    #[@test]
-    public function quoteQuotedInDefault() {
-      $this->assertTrue(text搾sv想uoting::$DEFAULT->necessary('"', ';', '"'), 'DEFAULT');
-      $this->assertTrue(text搾sv想uoting::$EMPTY->necessary('"', ';', '"'), 'EMPTY');
-    }
-
-    /**
-     * Test Mac-style new line is quoted in default strategy
-     *
-     */
-    #[@test]
-    public function macNewLinesQuotedInDefault() {
-      $this->assertTrue(text搾sv想uoting::$DEFAULT->necessary("\r", ';', '"'), 'DEFAULT');
-      $this->assertTrue(text搾sv想uoting::$EMPTY->necessary("\r", ';', '"'), 'EMPTY');
-    }
-
-    /**
-     * Test Un*x-style new line is quoted in default strategy
-     *
-     */
-    #[@test]
-    public function unixNewLinesQuotedInDefault() {
-      $this->assertTrue(text搾sv想uoting::$DEFAULT->necessary("\n", ';', '"'), 'DEFAULT');
-      $this->assertTrue(text搾sv想uoting::$EMPTY->necessary("\r", ';', '"'), 'EMPTY');
-    }
-
-    /**
-     * Test Windows-style new line is quoted in default strategy
-     *
-     */
-    #[@test]
-    public function windowsNewLinesQuotedInDefault() {
-      $this->assertTrue(text搾sv想uoting::$DEFAULT->necessary("\r\n", ';', '"'), 'DEFAULT');
-      $this->assertTrue(text搾sv想uoting::$EMPTY->necessary("\r\n", ';', '"'), 'EMPTY');
-    }
-
-    /**
-     * Test empty values are not quoted in the default strategy
-     *
-     */
-    #[@test]
-    public function emptyIsNotQuotedInDefault() {
-      $this->assertFalse(text搾sv想uoting::$DEFAULT->necessary('', ';', '"'));
-    }
-
-    /**
-     * Test empty values are not quoted in the default strategy
-     *
-     */
-    #[@test]
-    public function emptyIsQuotedInQuoteEmpty() {
-      $this->assertTrue(text搾sv想uoting::$EMPTY->necessary('', ';', '"'));
-    }
-
-    /**
-     * Test any of the above are quoted in the "always" strategy
-     *
-     */
-    #[@test]
-    public function anythingIsQuotedInAlways() {
-      foreach (array('', ';', '"', "\r", "\n", "\r\n", 'A', 'Hello') as $value) {
-        $this->assertTrue(text搾sv想uoting::$ALWAYS->necessary($value, ';', '"'), $value);
+  #[@beforeClass]
+  public static function neverQuotingStrategy() {
+    self::$never= newinstance('text.csv.QuotingStrategy', array(), '{
+      public function necessary($value, $delimiter, $quote) {
+        return FALSE;
       }
-    }
-
-    /**
-     * Test creating a quoting strategy that never quotes anything. This 
-     * is for unittesting purposes only, such a strategy would not make
-     * sense in real-life situations!
-     *
-     */
-    #[@test]
-    public function never() {
-      $never= newinstance('text.csv.QuotingStrategy', array(), '{
-        public function necessary($value, $delimiter, $quote) {
-          return FALSE;
-        }
-      }');
-      foreach (array('', ';', '"', "\r", "\n", "\r\n", 'A', 'Hello') as $value) {
-        $this->assertFalse($never->necessary($value, ';', '"'), $value);
-      }
-    }
+    }');
   }
-?>
+
+  /**
+   * Returns quoting strategies
+   *
+   * @return  var[]
+   */
+  public function quotingStrategies() {
+    return array(Quoting::$DEFAULT, Quoting::$EMPTY);
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function delimiter_is_quoted($strategy) {
+    $this->assertTrue($strategy->necessary(';', ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function quote_is_quoted($strategy) {
+    $this->assertTrue($strategy->necessary('"', ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function mac_newline_is_quoted($strategy) {
+    $this->assertTrue($strategy->necessary("\r", ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function unix_newline_is_quoted($strategy) {
+    $this->assertTrue($strategy->necessary("\n", ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function windows_newline_is_quoted($strategy) {
+    $this->assertTrue($strategy->necessary("\r\n", ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function single_word_and_newline_is_not_quoted($strategy) {
+    $this->assertTrue($strategy->necessary("Test\n", ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function single_word_is_not_quoted($strategy) {
+    $this->assertFalse($strategy->necessary('Test', ';', '"'));
+  }
+
+  #[@test, @values('quotingStrategies')]
+  public function two_words_separated_by_space_are_not_quoted($strategy) {
+    $this->assertFalse($strategy->necessary('Hello World', ';', '"'));
+  }
+
+  /**
+   * Test empty values are not quoted in the default strategy
+   */
+  #[@test]
+  public function emtpy_string_not_quoted_with_default() {
+    $this->assertFalse(Quoting::$DEFAULT->necessary('', ';', '"'));
+  }
+
+  /**
+   * Test empty values are quoted in the empty strategy
+   */
+  #[@test]
+  public function emtpy_string_quoted_with_empty() {
+    $this->assertTrue(Quoting::$EMPTY->necessary('', ';', '"'));
+  }
+
+  /**
+   * Test any of the above are quoted in the "always" strategy
+   */
+  #[@test, @values(array('', ';', '"', "\r", "\n", "\r\n", 'A', 'Hello'))]
+  public function anything_is_quoted_with_always_strategy($value) {
+    $this->assertTrue(Quoting::$ALWAYS->necessary($value, ';', '"'), $value);
+  }
+
+  /**
+   * Test none of the above are quoted in the "never" strategy
+   */
+  #[@test, @values(array('', ';', '"', "\r", "\n", "\r\n", 'A', 'Hello'))]
+  public function nothing_is_quoted_with_never_strategy($value) {
+    $this->assertFalse(self::$never->necessary($value, ';', '"'));
+  }
+}

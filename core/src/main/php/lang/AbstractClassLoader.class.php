@@ -35,6 +35,39 @@
     protected abstract function classUri($class);
 
     /**
+     * Return a class at the given URI
+     *
+     * @param   string uri
+     * @return  string fully qualified class name, or NULL
+     */
+    protected abstract function classAtUri($uri);
+
+    /**
+     * Return whether this class loader provides a given class via URI
+     *
+     * @param   string uri
+     * @return  bool
+     */
+    public function providesUri($uri) {
+      return NULL !== $this->classAtUri($uri);
+    }
+
+    /**
+     * Find the class by a given URI
+     *
+     * @param   string uri
+     * @return  lang.XPClass
+     * @throws  lang.ClassNotFoundException in case the class can not be found
+     */
+    public function loadUri($uri) {
+      if (NULL === ($class= $this->classAtUri($uri))) {
+        throw new ClassNotFoundException('URI:'.$uri);
+      }
+      return $this->loadClass($class);
+    }
+
+
+    /**
      * Load the class by the specified name
      *
      * @param   string class fully qualified class name io.File
@@ -43,21 +76,23 @@
      * @throws  lang.ClassFormatException in case the class format is invalud
      */
     public function loadClass0($class) {
-      if (isset(xp::$registry['classloader.'.$class])) return xp::reflect($class);
+      if (isset(xp::$cl[$class])) return xp::reflect($class);
 
       // Load class
       $package= NULL;
-      xp::$registry['classloader.'.$class]= $this->getClassName().'://'.$this->path;
-      xp::$registry['cl.level']++;
+      xp::$cl[$class]= $this->getClassName().'://'.$this->path;
+      xp::$cll++;
       try {
         $r= include($this->classUri($class));
       } catch (ClassLoadingException $e) {
-        xp::$registry['cl.level']--;
+        xp::$cll--;
 
-        $decl= (NULL === $package
-          ? substr($class, (FALSE === ($p= strrpos($class, '.')) ? 0 : $p + 1))
-          : strtr($class, '.', '·')
-        );
+        $decl= NULL;
+        if (NULL === $package) {
+          $decl= substr($class, (FALSE === ($p= strrpos($class, '.')) ? 0 : $p + 1));
+        } else {
+          $decl= strtr($class, '.', '·');
+        }
 
         // If class was declared, but loading threw an exception it means
         // a "soft" dependency, one that is only required at runtime, was
@@ -71,23 +106,42 @@
         // be declared.
         raise('lang.ClassLinkageException', $class, array($this), $e);
       }
-      xp::$registry['cl.level']--;
+      xp::$cll--;
       if (FALSE === $r) {
-        unset(xp::$registry['classloader.'.$class]);
-        throw new ClassNotFoundException($class, array($this));
+        unset(xp::$cl[$class]);
+        $e= new ClassNotFoundException($class, array($this));
+        xp::gc(__FILE__);
+        throw $e;
       }
       
-      // Register it
-      $name= ($package ? strtr($package, '.', '·').'·' : '').substr($class, (FALSE === ($p= strrpos($class, '.')) ? 0 : $p + 1));
-      if (!class_exists($name, FALSE) && !interface_exists($name, FALSE)) {
-        unset(xp::$registry['classloader.'.$class]);
-        raise('lang.ClassFormatException', 'Class "'.$name.'" not declared in loaded file');
+      // Register class name / literal mapping, which is one of the following:
+      //
+      // * No dot in the qualified class name -> ClassName
+      // * Dotted version declares $package -> com·example·ClassName
+      // * Dotted version resolves to a namespaced class -> com\example\ClassName
+      // * Dotted version resolves to class in the global namespace -> ClassName
+      //
+      // Create aliases for dotted versions not resolving to namespaces
+      if (FALSE === ($p= strrpos($class, '.'))) {
+        $name= $class;
+      } else if (NULL !== $package) {
+        $name= strtr($class, '.', '·');
+        class_alias($name, strtr($class, '.', '\\'));
+      } else if (($ns= strtr($class, '.', '\\')) && (class_exists($ns, FALSE) || interface_exists($ns, FALSE))) {
+        $name= $ns;
+      } else if (($cl= substr($class, $p+ 1)) && (class_exists($cl, FALSE) || interface_exists($cl, FALSE))) {
+        $name= $cl;
+        class_alias($name, strtr($class, '.', '\\'));
+      } else {
+        unset(xp::$cl[$class]);
+        raise('lang.ClassFormatException', 'Class "'.$class.'" not declared in loaded file');
       }
-      xp::$registry['class.'.$name]= $class;
-      method_exists($name, '__static') && xp::$registry['cl.inv'][]= array($name, '__static');
-      if (0 == xp::$registry['cl.level']) {
-        $invocations= xp::$registry['cl.inv'];
-        xp::$registry['cl.inv']= array();
+
+      xp::$cn[$name]= $class;
+      method_exists($name, '__static') && xp::$cli[]= array($name, '__static');
+      if (0 === xp::$cll) {
+        $invocations= xp::$cli;
+        xp::$cli= array();
         foreach ($invocations as $inv) call_user_func($inv);
       }
       return $name;
@@ -104,12 +158,36 @@
     }
 
     /**
+     * Returns a hashcode for this class loader
+     *
+     * @return string
+     */
+    public function hashCode() {
+      return 'cl@'.$this->path;
+    }
+
+    /**
+     * Returns a unique identifier for this class loader instance
+     *
+     * @return  string
+     */
+    public function instanceId() {
+      return $this->path;
+    }
+
+    /**
      * Creates a string representation
      *
      * @return  string
      */
     public function toString() {
-      return $this->getClassName(). '<'.$this->path.'>';
+      $segments= explode(DIRECTORY_SEPARATOR, $this->path);
+      if (sizeof($segments) > 6) {
+        $path= '...'.DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, array_slice($segments, -6));
+      } else {
+        $path= $this->path;
+      }
+      return str_replace('ClassLoader', 'CL', $this->getClass()->getSimpleName()).'<'.$path.'>';
     }
   }
 ?>

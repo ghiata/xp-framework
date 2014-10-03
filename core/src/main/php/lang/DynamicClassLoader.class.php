@@ -11,6 +11,7 @@
    *
    * @see   xp://lang.ClassLoader::defineClass
    * @test  xp://net.xp_framework.unittest.reflection.RuntimeClassDefinitionTest
+   * @test  xp://net.xp_framework.unittest.reflection.ClassFromDynamicDefinitionTest
    */
   class DynamicClassLoader extends AbstractClassLoader {
     const DEVICE = 1852557578;   // crc32('lang.DynamicClassLoader')
@@ -73,6 +74,10 @@
      * @return  bool
      */
     public function providesPackage($package) {
+      $l= strlen($package);
+      foreach (array_keys(self::$bytes) as $class) {
+        if (0 === strncmp($class, $package, $l)) return TRUE;
+      }
       return FALSE;
     }
 
@@ -95,7 +100,18 @@
     protected function classUri($class) {
       return 'dyn://'.$class;
     }
-    
+
+    /**
+     * Return a class at the given URI
+     *
+     * @param   string uri
+     * @return  string fully qualified class name, or NULL
+     */
+    protected function classAtUri($uri) {
+      sscanf($uri, 'dyn://%s', $name);
+      return isset(self::$bytes[$name]) ? $name : NULL;
+    }
+
     /**
      * Fetch instance of classloader by path
      *

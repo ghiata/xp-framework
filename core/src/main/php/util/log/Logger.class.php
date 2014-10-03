@@ -71,6 +71,12 @@
    * appenders="util.log.FileAppender"
    * appender.util.log.FileAppender.params="filename"
    * appender.util.log.FileAppender.param.filename="/var/log/xp/subscribe_%Y-%m-%d.log"
+   *
+   * [info.binford6100.webservices.context]
+   * appenders="util.log.FileAppender"
+   * context="util.log.context.MappedLogContext"
+   * appender.util.log.FileAppender.params="filename"
+   * appender.util.log.FileAppender.param.filename="/var/log/xp/service_%Y-%m-%d.log"
    * </pre>
    *
    * @test     xp://net.xp_framework.unittest.logging.LoggerTest
@@ -105,7 +111,16 @@
       if (!isset($this->category[$name])) $name= self::DFLT;
       return $this->category[$name];
     }
-    
+
+    /**
+     * Get list of all categories
+     *
+     * @return util.log.LogCategory[]
+     */
+    public function getCategories() {
+    	return $this->category;
+    }
+
     /**
      * Configure this logger
      *
@@ -158,12 +173,17 @@
           
           // Params
           foreach ($params as $param) {
-            $a->{$param}= strftime(
-              $prop->readString(
-                $section,
-                'appender.'.$appender.'.param.'.$param,
-                ''
-              )
+            $a->{$param}= $prop->readString(
+              $section,
+              'appender.'.$appender.'.param.'.$param,
+              ''
+            );
+          }
+
+          // Set context
+          if ('' !== ($contextFQN= $prop->readString($section, 'context', ''))) {
+            $this->category[$section]->setContext(
+              XPClass::forName($contextFQN)->newInstance()
             );
           }
         }

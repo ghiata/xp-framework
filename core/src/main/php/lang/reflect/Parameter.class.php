@@ -5,6 +5,7 @@
  */
 
   $package= 'lang.reflect';
+  uses('lang.ClassFormatException');
 
   /**
    * Represents a method's parameter
@@ -45,13 +46,19 @@
      * @return  lang.Type
      */
     public function getType() {
+      if ($c= $this->_reflect->getClass()) return new XPClass($c);
+
       if (
         !($details= XPClass::detailsForMethod($this->_details[0], $this->_details[1])) ||  
         !isset($details[DETAIL_ARGUMENTS][$this->_details[2]])
       ) {   // Unknown or unparseable, return ANYTYPE
         return Type::$VAR;
       }
-      return Type::forName(ltrim($details[DETAIL_ARGUMENTS][$this->_details[2]], '&'));
+      if ('self' === ($t= ltrim($details[DETAIL_ARGUMENTS][$this->_details[2]], '&'))) {
+        return new XPClass($this->_details[0]);
+      } else {
+        return Type::forName($t);
+      }
     }
 
     /**
@@ -75,12 +82,25 @@
      * @return  lang.Type or NULL if there is no restriction
      */
     public function getTypeRestriction() {
-      if ($this->_reflect->isArray()) {
-        return Primitive::$ARRAY;
-      } else if ($c= $this->_reflect->getClass()) {
-        return new XPClass($c);
-      } else {
-        return NULL;
+      try {
+        if ($this->_reflect->isArray()) {
+          return Primitive::$ARRAY;
+        } else if ($c= $this->_reflect->getClass()) {
+          return new XPClass($c);
+        } else {
+          return NULL;
+        }
+      } catch (ReflectionException $e) {
+
+        // In case a typehint references an undeclared class, a ReflectionException will
+        // be thrown.
+        throw new ClassFormatException(sprintf(
+          'Typehint for %s::%s()\'s parameter "%s" cannot be resolved: %s',
+          $this->_details[0],
+          $this->_details[1],
+          $this->_reflect->getName(),
+          $e->getMessage()
+       ));
       }
     }
 
@@ -105,6 +125,87 @@
       }
 
       throw new IllegalStateException('Parameter "'.$this->_reflect->getName().'" has no default value');
+    }
+
+    /**
+     * Check whether an annotation exists
+     *
+     * @param   string name
+     * @param   string key default NULL
+     * @return  bool
+     */
+    public function hasAnnotation($name, $key= NULL) {
+      $n= '$'.$this->_reflect->getName();
+      if (
+        !($details= XPClass::detailsForMethod($this->_details[0], $this->_details[1])) ||  
+        !isset($details[DETAIL_TARGET_ANNO][$n])
+      ) {   // Unknown or unparseable
+        return FALSE;
+      }
+
+      return $details && ($key 
+        ? array_key_exists($key, (array)@$details[DETAIL_TARGET_ANNO][$n][$name]) 
+        : array_key_exists($name, (array)@$details[DETAIL_TARGET_ANNO][$n])
+      );
+    }
+
+    /**
+     * Retrieve annotation by name
+     *
+     * @param   string name
+     * @param   string key default NULL
+     * @return  var
+     * @throws  lang.ElementNotFoundException
+     */
+    public function getAnnotation($name, $key= NULL) {
+      $n= '$'.$this->_reflect->getName();
+      if (
+        !($details= XPClass::detailsForMethod($this->_details[0], $this->_details[1])) ||  
+        !isset($details[DETAIL_TARGET_ANNO][$n]) || !($key 
+          ? array_key_exists($key, (array)@$details[DETAIL_TARGET_ANNO][$n][$name]) 
+          : array_key_exists($name, (array)@$details[DETAIL_TARGET_ANNO][$n])
+        ) 
+      ) return raise(
+        'lang.ElementNotFoundException', 
+        'Annotation "'.$name.($key ? '.'.$key : '').'" does not exist'
+      );
+
+      return ($key 
+        ? $details[DETAIL_TARGET_ANNO][$n][$name][$key] 
+        : $details[DETAIL_TARGET_ANNO][$n][$name]
+      );
+    }
+
+    /**
+     * Retrieve whether a method has annotations
+     *
+     * @return  bool
+     */
+    public function hasAnnotations() {
+      $n= '$'.$this->_reflect->getName();
+      if (
+        !($details= XPClass::detailsForMethod($this->_details[0], $this->_details[1])) ||  
+        !isset($details[DETAIL_TARGET_ANNO][$n])
+      ) {   // Unknown or unparseable
+        return FALSE;
+      }
+      return $details ? !empty($details[DETAIL_TARGET_ANNO][$n]) : FALSE;
+    }
+
+    /**
+     * Retrieve all of a method's annotations
+     *
+     * @return  var[] annotations
+     */
+    public function getAnnotations() {
+      $n= '$'.$this->_reflect->getName();
+      if (
+        !($details= XPClass::detailsForMethod($this->_details[0], $this->_details[1])) ||  
+        !isset($details[DETAIL_TARGET_ANNO][$n])
+      ) {   // Unknown or unparseable
+        return array();
+      }
+      return $details[DETAIL_TARGET_ANNO][$n];
     }
     
     /**

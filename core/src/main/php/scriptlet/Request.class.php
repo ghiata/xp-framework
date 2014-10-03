@@ -4,14 +4,14 @@
  * $Id$
  */
 
+  $package= 'scriptlet';
+
   uses('scriptlet.Cookie', 'scriptlet.Session');
 
   /**
    * Defines the request sent by the client to the server
-   *
-   * @purpose  Interface
    */  
-  interface Request {
+  interface scriptlet·Request {
 
     /**
      * Returns whether a session exists
@@ -115,5 +115,12 @@
      * @return  string
      */
     public function getQueryString();
+
+    /**
+     * Gets the input stream
+     *
+     * @param   io.streams.InputStream
+     */
+    public function getInputStream();
   }
 ?>

@@ -278,8 +278,14 @@
       } else {
         $signature= $args= '';
         foreach ($method->getParameters() as $param) {
+          $signature.= ', ';
           $restriction= $param->getTypeRestriction();
-          $signature.= ', '.($restriction ? xp::reflect($restriction->getName()) : '').' $'.$param->getName();
+          if ($restriction instanceof XPClass) {
+            $signature.= '\\'.strtr($restriction->getName(), array('php.' => '', '.' => '\\'));
+          } else if (Primitive::$ARRAY->equals($restriction)) {
+            $signature.= 'array';
+          }
+          $signature.= ' $'.$param->getName();
           $args.= ', $'.$param->getName();
           $param->isOptional() && $signature.= '= '.var_export($param->getDefaultValue(), TRUE);
         }
@@ -289,7 +295,7 @@
         // Create method
         $bytes.= (
           'public function '.$method->getName().'('.$signature.') { '.
-          'return $this->'.$this->getHandlerName().'->invoke($this, \''.$method->getName(TRUE).'\', array('.$args.')); '.
+          'return $this->'.$this->getHandlerName().'->invoke($this, \''.$method->getName(TRUE).'\', func_get_args()); '.
           '}'."\n"
         );
       }

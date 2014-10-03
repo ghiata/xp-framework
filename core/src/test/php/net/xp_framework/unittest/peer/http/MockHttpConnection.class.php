@@ -1,38 +1,46 @@
-<?php
-/* This class is part of the XP framework
+<?php namespace net\xp_framework\unittest\peer\http;
+
+/**
+ * Mock HTTP connection
  *
- * $Id$
+ * @see   xp://peer.http.HttpConnection
  */
+class MockHttpConnection extends \peer\http\HttpConnection {
+  protected $lastRequest= null;
+  protected $cat= null;
 
-  uses('peer.http.HttpConnection');
-  
   /**
-   * Mock HTTP connection
+   * Returns last request
    *
-   * @test     xp://peer.http.HttpConnection
-   * @purpose  Mock connection
+   * @return peer.http.HttpRequest
    */
-  class MockHttpConnection extends HttpConnection {
-    var
-      $lastRequest= NULL;
-  
-    /**
-     * Returns last request
-     *
-     * @return peer.http.HttpRequest
-     */
-    public function getLastRequest() {
-      return $this->lastRequest;
-    }
-
-    /**
-     * Send a HTTP request
-     *
-     * @param   peer.http.HttpRequest
-     * @return  peer.http.HttpResponse response object
-     */
-    public function send(HttpRequest $r) {
-      $this->lastRequest= $r;
-    }
+  public function getLastRequest() {
+    return $this->lastRequest;
   }
-?>
+
+  /**
+   * Send a HTTP request
+   *
+   * @param   peer.http.HttpRequest
+   * @return  peer.http.HttpResponse response object
+   */
+  public function send(\peer\http\HttpRequest $request) {
+    $this->lastRequest= $request;
+
+    $this->cat && $this->cat->info('>>>', $request->getHeaderString());
+    $response= new \peer\http\HttpResponse(
+      new \io\streams\MemoryInputStream("HTTP/1.0 200 Testing OK\r\n")
+    );
+    $this->cat && $this->cat->info('<<<', $response->getHeaderString());
+    return $response;
+  }
+
+  /**
+   * Sets a logger category for debugging
+   *
+   * @param   util.log.LogCategory $cat
+   */
+  public function setTrace($cat) {
+    $this->cat= $cat;
+  }
+}

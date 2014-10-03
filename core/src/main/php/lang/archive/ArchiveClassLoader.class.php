@@ -22,11 +22,10 @@
    *   $obj= $class->newInstance();
    * </code>
    *
-   * @test     xp://net.xp_framework.unittest.core.ArchiveClassLoaderTest
-   * @purpose  Load classes from an archive
-   * @see      xp://lang.ClassLoader
-   * @see      xp://lang.archive.Archive
-   * @ext      tokenize
+   * @test  xp://net.xp_framework.unittest.core.ArchiveClassLoaderTest
+   * @test  xp://net.xp_framework.unittest.reflection.ClassFromArchiveTest
+   * @see   xp://lang.ClassLoader
+   * @see   xp://lang.archive.Archive
    */
   class ArchiveClassLoader extends AbstractClassLoader {
     protected $archive= NULL;
@@ -67,6 +66,45 @@
     }
 
     /**
+     * Return a class at the given URI
+     *
+     * @param   string uri
+     * @return  string fully qualified class name, or NULL
+     */
+    protected function classAtUri($uri) {
+      if (0 !== substr_compare($uri, xp::CLASS_FILE_EXT, -strlen(xp::CLASS_FILE_EXT))) return NULL;
+
+      // Absolute URIs have the form "xar://containing.xar?the/classes/Name.class.php"
+      if ((DIRECTORY_SEPARATOR === $uri{0} || (':' === $uri{1} && '\\' === $uri{2}))) {
+        return NULL;
+      } else if (FALSE !== ($p= strpos($uri, '?'))) {
+        $archive= substr($uri, 0, $p + 1);
+        if ($archive !== $this->archive) return NULL;
+        $uri= substr($uri, $p + 1);
+      } else {
+        $archive= $this->archive;
+      }
+
+      // Normalize path: Force forward slashes, strip out "." and empty elements,
+      // interpret ".." by backing up until last forward slash is found.
+      $path= '';
+      foreach (explode('/', strtr($uri, DIRECTORY_SEPARATOR, '/')) as $element) {
+        if ('' === $element || '.' === $element) {
+          // NOOP
+        } else if ('..' === $element) {
+          $path= substr($path, 0, strrpos($path, '/'));
+        } else {
+          $path.= '/'.$element;
+        }
+      }
+
+      return is_file($archive.substr($path, 1))
+        ? strtr(substr($path, 1, -strlen(xp::CLASS_FILE_EXT)), '/', '.')
+        : NULL
+      ;
+    }
+
+    /**
      * Loads a resource.
      *
      * @param   string string name of resource
@@ -74,11 +112,9 @@
      * @throws  lang.ElementNotFoundException in case the resource cannot be found
      */
     public function getResource($string) {
-      if (FALSE !== ($r= file_get_contents($this->archive.$string))) {
-        return $r;
-      }
-
-      return raise('lang.ElementNotFoundException', 'Could not load resource '.$string);
+      if (FALSE !== ($r= file_get_contents($this->archive.$string))) return $r;
+      xp::gc(__FILE__);
+      raise('lang.ElementNotFoundException', 'Could not load resource '.$string);
     }
     
     /**
@@ -142,7 +178,7 @@
     public static function instanceFor($path, $expand= TRUE) {
       static $pool= array();
       
-      $path= $expand && 0 !== strncmp('xar%3A%2F%2F', $path, 12) ? realpath($path) : $path;
+      $path= $expand && 0 !== strncmp('xar://', urldecode($path), 6) ? realpath($path) : $path;
       if (!isset($pool[$path])) {
         $pool[$path]= new self($path);
       }

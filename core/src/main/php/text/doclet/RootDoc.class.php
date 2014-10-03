@@ -56,15 +56,15 @@
     const T_USES                = 0x1000;
     const T_PACKAGE             = 0x1001;
     const T_DEFINE              = 0x1002;
-    
+
     /**
      * Constructor
      *
      */
     public function __construct() {
-      $this->setSourcePath(xp::$registry['classpath']);
+      $this->setSourcePath(xp::$classpath);
     }
-    
+
     /**
      * Sets source path
      *
@@ -93,7 +93,16 @@
       }
       $this->sourcepath[$l->hashCode()]= $l;
     }
-    
+
+    /**
+     * Adds a source loader
+     *
+     * @param   lang.IClassLoader
+     */
+    public function addSourceLoader(IClassLoader $l) {
+      $this->sourcepath[$l->hashCode()]= $l;
+    }
+
     /**
      * Start a doclet
      *
@@ -151,7 +160,7 @@
      * @return  lang.IClassLoader the classloader providing the package
      */
     public function findPackage($package) {
-      foreach ($this->sourcepath as $loader) {
+      foreach (ClassLoader::getDefault()->getLoaders() as $loader) {
         if ($loader->providesPackage($package)) return $loader;
       }
       return NULL;
@@ -164,7 +173,7 @@
      * @return  lang.IClassLoader the classloader providing the resource
      */
     public function findResource($name) {
-      foreach ($this->sourcepath as $loader) {
+      foreach (ClassLoader::getDefault()->getLoaders() as $loader) {
         if ($loader->providesResource($name)) return $loader;
       }
       return NULL;
@@ -177,7 +186,7 @@
      * @return  lang.IClassLoader the classloader providing the class
      */
     public function findClass($classname) {
-      foreach ($this->sourcepath as $loader) {
+      foreach (ClassLoader::getDefault()->getLoaders() as $loader) {
         if ($loader->providesClass($classname)) return $loader;
       }
       return NULL;
@@ -195,10 +204,11 @@
       $l= -strlen(xp::CLASS_FILE_EXT);
       foreach ($this->sourcepath as $loader) {
         foreach ($loader->packageContents($package) as $name) {
+          $appx= $package ? $package.'.' : '';
           if (xp::CLASS_FILE_EXT === substr($name, $l)) {
-            $r[]= $package.'.'.substr($name, 0, $l);
+            $r[]= $appx.substr($name, 0, $l);
           } else if ($recursive && '/' === substr($name, -1)) {
-            $r= array_merge($r, $this->classesIn($package.'.'.substr($name, 0, -1), $recursive));
+            $r= array_merge($r, $this->classesIn($appx.substr($name, 0, -1), $recursive));
           }
         }
       }
@@ -213,10 +223,13 @@
      * @return  string qualified name
      */
     public function qualifyName($doc, $name) {
-      if (!($lookup= xp::registry('class.'.$name))) {
+      if (isset(xp::$cn[$name])) {
         foreach ($doc->usedClasses->classes as $class) {
-          if (xp::reflect($class) == $name) return $class;
+          if (xp::reflect($class) === $name) return $class;
         }
+        $lookup= xp::$cn[$name];
+      } else {
+        $lookup= NULL;
       }
 
       // Nothing found!
@@ -377,7 +390,7 @@
             case self::ST_INITIAL.T_VARIABLE:
               if ('$package' === $t[1]) {   // RFC #0037: $package= 'lang.reflect';
                 while (T_CONSTANT_ENCAPSED_STRING !== $tokens[$i][0] && $i < $s) $i++;
-                $package= $tokens[$i][1];
+                $package= trim($tokens[$i][1], '\'"');
               }
               break;
 
@@ -399,6 +412,16 @@
 
             case self::ST_INITIAL.self::T_DEFINE:
               $state= self::ST_DEFINE;
+              break;
+
+            case self::ST_INITIAL.T_NAMESPACE:
+              $package= '';
+              $i+= 2; // Eat "namespace"
+              while (';' !== $tokens[$i][0] && $i < $s) {
+                $package.= trim($tokens[$i++][1]);
+              }
+
+              $package= strtr($package, '\\', '.');
               break;
 
             case self::ST_DEFINE.T_CONSTANT_ENCAPSED_STRING:
@@ -424,7 +447,12 @@
             case self::ST_INITIAL.T_CLASS:
               while (T_STRING !== $tokens[$i][0] && $i < $s) $i++;
 
-              $doc->name= $package ? substr($tokens[$i][1], strlen($package)- 1) : $tokens[$i][1];
+              $name= $tokens[$i][1];
+              if ($package && substr(strtr($name, '·', '.'), 0, strlen($package)) == $package) {
+                $name= substr($name, strlen($package)+ 1);
+              }
+
+              $doc->name= $name;
               $doc->qualifiedName= $classname;
               $doc->rawComment= $comment;
               $doc->annotations= $annotations;

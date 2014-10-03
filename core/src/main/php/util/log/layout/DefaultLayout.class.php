@@ -9,6 +9,7 @@
   /**
    * Default layout
    *
+   * @test  xp://net.xp_framework.unittest.logging.DefaultLayoutTest
    */
   class DefaultLayout extends util·log·Layout {
   
@@ -32,10 +33,11 @@
      */
     public function format(LoggingEvent $event) {
       return sprintf(
-        "[%s %5d %5s] %s\n", 
+        "[%s %5d %5s] %s%s\n", 
         date('H:i:s', $event->getTimestamp()),
         $event->getProcessId(),
         strtolower(LogLevel::nameOf($event->getLevel())),
+        NULL === ($context= $event->getContext()) ? '' : $context->format().' ',
         implode(' ', array_map(array($this, 'stringOf'), $event->getArguments()))
       );
     }

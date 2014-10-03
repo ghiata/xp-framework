@@ -166,6 +166,15 @@
     public function setAttribute($name, $value) {
       $this->attribute[$name]= $value;
     }
+
+    /**
+     * Sets all attributes
+     *
+     * @param   <string,string>[] attributes
+     */
+    public function setAttributes($attrs) {
+      $this->attribute= $attrs;
+    }
     
     /**
      * Retrieve an attribute by its name. Returns the default value if the
@@ -177,6 +186,15 @@
      */
     public function getAttribute($name, $default= NULL) {
       return isset($this->attribute[$name]) ? $this->attribute[$name] : $default;
+    }
+
+    /**
+     * Retrieve all attributes
+     *
+     * @return   <string, string>[] attributes
+     */
+    public function getAttributes() {
+      return $this->attribute;
     }
 
     /**
@@ -227,18 +245,18 @@
      * </pre>
      *
      * @param   int indent default INDENT_WRAPPED
-     * @param   string encoding default 'iso-8859-1'
+     * @param   string encoding defaults to XP default encoding
      * @param   string inset default ''
      * @return  string XML
      */
-    public function getSource($indent= INDENT_WRAPPED, $encoding= 'iso-8859-1', $inset= '') {
+    public function getSource($indent= INDENT_WRAPPED, $encoding= xp::ENCODING, $inset= '') {
       $xml= $inset.'<'.$this->name;
-      $conv= 'iso-8859-1' != $encoding;
+      $conv= xp::ENCODING != $encoding;
       
       if ('string' == ($type= gettype($this->content))) {
         $content= $conv
-          ? iconv('iso-8859-1', $encoding, htmlspecialchars($this->content, ENT_COMPAT, 'iso-8859-1'))
-          : htmlspecialchars($this->content, ENT_COMPAT, 'iso-8859-1')
+          ? iconv(xp::ENCODING, $encoding, htmlspecialchars($this->content, ENT_COMPAT, xp::ENCODING))
+          : htmlspecialchars($this->content, ENT_COMPAT, xp::ENCODING)
         ;
       } else if ('float' == $type) {
         $content= ($this->content - floor($this->content) == 0)
@@ -247,12 +265,12 @@
         ;
       } else if ($this->content instanceof PCData) {
         $content= $conv
-          ? iconv('iso-8859-1', $encoding, $this->content->pcdata)
+          ? iconv(xp::ENCODING, $encoding, $this->content->pcdata)
           : $this->content->pcdata
         ;
       } else if ($this->content instanceof CData) {
         $content= '<![CDATA['.str_replace(']]>', ']]]]><![CDATA[>', $conv
-          ? iconv('iso-8859-1', $encoding, $this->content->cdata)
+          ? iconv(xp::ENCODING, $encoding, $this->content->cdata)
           : $this->content->cdata
         ).']]>';
       } else if ($this->content instanceof String) {
@@ -264,9 +282,9 @@
       if (INDENT_NONE === $indent) {
         foreach ($this->attribute as $key => $value) {
           $xml.= ' '.$key.'="'.htmlspecialchars(
-            $conv ? iconv('iso-8859-1', $encoding, $value) : $value,
+            $conv ? iconv(xp::ENCODING, $encoding, $value) : $value,
             ENT_COMPAT,
-            'iso-8859-1'
+            xp::ENCODING
           ).'"';
         }
         $xml.= '>'.$content;
@@ -279,9 +297,9 @@
           $sep= (sizeof($this->attribute) < 3) ? '' : "\n".$inset;
           foreach ($this->attribute as $key => $value) {
             $xml.= $sep.' '.$key.'="'.htmlspecialchars(
-              $conv ? iconv('iso-8859-1', $encoding, $value) : $value,
+              $conv ? iconv(xp::ENCODING, $encoding, $value) : $value,
               ENT_COMPAT,
-              'iso-8859-1'
+              xp::ENCODING
             ).'"';
           }
           $xml.= $sep;
@@ -329,6 +347,68 @@
       $this->addChild($child);
       return $this;
     }
+
+    /**
+     * Set children to given list of children
+     *
+     * @param xml.Node[] children
+     */
+    public function setChildren(array $children) {
+      $this->children= array();
+      foreach ($children as $child) {
+        $this->addChild($child);
+      }
+    }
+
+    /**
+     * Retrieve node children
+     *
+     * @return   xml.Node[] children
+     */
+    public function getChildren() {
+      return $this->children;
+    }
+
+    /**
+     * Clear node children
+     *
+     */
+    public function clearChildren() {
+      $this->setChildren(array());
+    }
+
+    /**
+     * Retrieve number of children
+     *
+     * @return  int
+     */
+    public function numChildren() {
+      return sizeof($this->children);
+    }
+
+    /**
+     * Determine whether node has node children
+     *
+     * @return   bool
+     */
+    public function hasChildren() {
+      return 0 < sizeof($this->children);
+    }
+
+    /**
+     * Retrieve nth node child
+     *
+     * @param    int pos
+     * @return   xml.Node
+     * @throws   lang.ElementNotFoundException if array index out of bounds
+     */
+    public function nodeAt($pos) {
+      if (!isset($this->children[$pos])) {
+        throw new ElementNotFoundException('Cannot access node at position '.$pos);
+      }
+
+      return $this->children[$pos];
+    }
     
     /**
      * Returns whether another object is equal to this node
@@ -356,7 +436,7 @@
       } else {
         $s.= NULL === $this->content ? "\n" : "\n  ".xp::stringOf($this->content)."\n";
         foreach ($this->children as $child) {
-          $s.= '  '.str_replace("\n", "\n  ", xp::stringOf($child))."\n";
+          $s.= '  '.xp::stringOf($child, '  ')."\n";
         }
       }
       return $s.'}';

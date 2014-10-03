@@ -65,6 +65,7 @@
       if ($u->getParam('open')) $flags ^= OP_HALFOPEN;
       if ($u->getParam('read-only')) $flags |= OP_READONLY;
       
+
       $mbx= isset($attr['mbx']) ? $attr['mbx'] : sprintf(
         '{%s:%d/%s}',
         $u->getHost(),
@@ -79,7 +80,7 @@
           $this->_errors()
         );
       }
-      
+
       $this->_hdl= array($conn, $mbx);
       return TRUE;
     }
@@ -133,7 +134,21 @@
       
       return TRUE;
     }
-  
+
+    /**
+     * Check whether a folder exists
+     *
+     * @param   string name
+     * @return  bool
+     */
+    public function hasFolder($name) {
+      $r= imap_list($this->_hdl[0], $this->_hdl[1], $name);
+      if (imap_last_error()) {
+        throw new MessagingException('Listing folders failed', $this->_errors());
+      }
+      return !empty($r);
+    }
+
     /**
      * Get a folder. Note: Results from this method are cached.
      *
@@ -144,11 +159,7 @@
     public function getFolder($name) { 
       if (!$this->cache->has(SKEY_FOLDER.$name)) {
         if (FALSE === imap_list($this->_hdl[0], $this->_hdl[1], $name)) {
-          trigger_error('Folder: '.$name, E_USER_NOTICE);
-          throw new MessagingException(
-            'Retrieving folder failed',
-            $this->_errors()
-          );
+          throw new MessagingException('Retrieving folder "'.$name.'" failed', $this->_errors());
         }
         
         $folder= new MailFolder($this, $name);
@@ -341,8 +352,15 @@
      */
     public function getMessages($f) {
       if (1 == func_num_args()) {
-        $count= $this->getMessageCount($f, 'messages');
-        $msgnums= range(1, $count);
+        $check= imap_check($this->_hdl[0]);
+        if (FALSE === $check) {
+          throw new MessagingException(
+            'Retrieving message count from "'.$f->name.'" failed',
+            $this->_errors()
+          );
+        }
+        if (0 === $check->Nmsgs) return array();
+        $msgnums= range(1, $check->Nmsgs);
       } else {
         $msgnums= array();
         for ($i= 1, $s= func_num_args(); $i < $s; $i++) {
@@ -362,7 +380,7 @@
           $messages[]= $msg;
         }
       }
-      
+
       if (!empty($seq)) {
         if (FALSE === ($list= imap_fetch_overview($this->_hdl[0], substr($seq, 1)))) {
           throw new MessagingException(
@@ -422,7 +440,7 @@
             'Retrieving message count [SA_'.strtoupper($attr).'] failed',
             $this->_errors()
           );
-        }            
+        }
       }
       
       return $info->$attr;
